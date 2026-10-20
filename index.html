@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -55,6 +55,11 @@
       <div class="mapsearch">
         <input class="search" id="mapSearch" type="search" placeholder="Find a bottle on the map" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Find a bottle on the map">
         <div class="suggest" id="mapSuggest"></div>
+      </div>
+      <div class="glass card" id="mapNoZones" hidden>
+        <h2>No sections on this map yet</h2>
+        <p>The 3D view shows a box for every section. Load your store layout (A to Z and doors 1 to 17), or tap Edit sections to draw your own.</p>
+        <button class="btn" id="mapLoadZonesBtn" type="button">Load the store layout</button>
       </div>
       <div class="glass mapwrap" id="mapWrap">
         <div class="mapcv" id="mapCv"><canvas id="mapCanvas"></canvas></div>
@@ -217,10 +222,10 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=30"></script>
-<script src="app.js?v=30"></script>
-<script src="photo.js?v=30"></script>
-<script src="map.js?v=30"></script>
-<script src="backup.js?v=30"></script>
+<script src="search.js?v=31"></script>
+<script src="app.js?v=31"></script>
+<script src="photo.js?v=31"></script>
+<script src="map.js?v=31"></script>
+<script src="backup.js?v=31"></script>
 </body>
 </html>

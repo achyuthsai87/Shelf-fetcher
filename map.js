@@ -291,7 +291,7 @@
   }
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
-  var tapStart = null, lastTapUp = 0, rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
+  var loadStarterFn = null, tapStart = null, lastTapUp = 0, rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -437,6 +437,7 @@
           : (map.zones.length ? 'Every section in your list is on the map.' : '');
       }
       $('#mapCv').style.touchAction = 'none';
+      $('#mapNoZones').hidden = edit || !!(map.zones && map.zones.length);
     }
     caption();
     schedule();
@@ -658,6 +659,7 @@
   function init() {
     map = loadMap();
     var cv = $('#mapCanvas');
+    try {
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
@@ -671,6 +673,7 @@
     $('#mapZoomOut').addEventListener('click', function () { setZoom(zoom / 1.6); });
     window.addEventListener('resize', schedule);
     $('#mapPickBtn').addEventListener('click', function () { $('#mapFile').click(); });
+    loadStarterFn = loadStarter;
     function loadStarter() {
       if (window.ShelfBackup) window.ShelfBackup.snapshot('Before reloading the layout');
       Promise.all([fetch('./starter-layout.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
@@ -686,6 +689,7 @@
       }).catch(function () { toast('Could not load the layout. Check your connection.'); });
     }
     $('#mapStarterBtn').addEventListener('click', loadStarter);
+    $('#mapLoadZonesBtn').addEventListener('click', loadStarter);
     $('#mapLayoutBtn').addEventListener('click', function () {
       var b = this;
       if (b.getAttribute('data-armed') !== '1') {
@@ -764,6 +768,7 @@
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
     $('#zoneScrim').addEventListener('mousedown', function (e) { if (e.target === this) closeZone(); });
+    } catch (err) { try { console.error('map wiring', err); } catch (e2) {} }
     loadImage(function () { refresh(); notify(); });
   }
 
