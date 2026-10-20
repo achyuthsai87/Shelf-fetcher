@@ -26,34 +26,61 @@
     state.dead = true;
     try { if (state.reader) state.reader.reset(); } catch (e) {}
     try { clearInterval(state.timer); } catch (e) {}
+    try { if (state.ac) state.ac.close(); } catch (e) {}
     try { if (state.stream) state.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
     var ov = $('#scanOv'); if (ov) ov.remove();
     state = null;
   }
 
-  function open(onCode) {
+  function open(onCode, opts) {
+    opts = opts || {};
     if (state) stop();
     var ov = document.createElement('div');
-    ov.className = 'scanov'; ov.id = 'scanOv';
-    ov.innerHTML = '<div class="scanbox"><video id="scanVideo" playsinline muted autoplay></video><div class="scanline"></div></div>' +
+    ov.className = 'scanov' + (opts.continuous ? ' cont' : ''); ov.id = 'scanOv';
+    ov.innerHTML = (opts.head ? '<div class="scanhead">' + opts.head + '</div>' : '') + '<div class="scanbox"><video id="scanVideo" playsinline muted autoplay></video><div class="scanline"></div></div>' +
       '<p class="scanmsg" id="scanMsg">Starting the camera...</p>' +
       '<div class="scanrow"><input id="scanType" inputmode="numeric" placeholder="Or type the barcode" autocomplete="off"><button class="btn" id="scanTypeGo" type="button">Use</button></div>' +
-      '<div class="scanrow"><label class="btn ghost scanpick">Use a photo instead<input id="scanPhoto" type="file" accept="image/*" capture="environment" hidden></label><button class="btn ghost" id="scanClose" type="button">Close</button></div>';
+      (opts.continuous ? '<div class="scanlog" id="scanLog"></div>' : '') +
+      '<div class="scanrow"><label class="btn ghost scanpick">Use a photo instead<input id="scanPhoto" type="file" accept="image/*" capture="environment" hidden></label><button class="btn' + (opts.continuous ? '' : ' ghost') + '" id="scanClose" type="button">' + (opts.doneText || 'Close') + '</button></div>';
     document.body.appendChild(ov);
-    state = { dead: false, onCode: onCode, done: false };
+    state = { dead: false, onCode: onCode, done: false, opts: opts, lastCode: '', lastAt: 0 };
     var msg = $('#scanMsg');
     function found(code) {
       if (!state || state.done || state.dead) return;
       code = String(code || '').replace(/\s+/g, '');
       if (!code) return;
+      if (opts.continuous) {
+        var now = Date.now();
+        if (code === state.lastCode && now - state.lastAt < 2500) { state.lastAt = now; return; }
+        state.lastCode = code; state.lastAt = now;
+        var r = state.onCode(code);
+        if (r && r.text) addLog(r);
+        return;
+      }
       state.done = true;
       var cb = state.onCode;
       stop();
       cb(code);
     }
-    $('#scanClose').addEventListener('click', stop);
-    $('#scanTypeGo').addEventListener('click', function () { found($('#scanType').value); });
-    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); found($('#scanType').value); } });
+    function addLog(r) {
+      var host = $('#scanLog'); if (!host) return;
+      var d = document.createElement('div'); d.className = 'logrow ' + (r.cls || '');
+      var sp = document.createElement('span'); sp.textContent = r.text; d.appendChild(sp);
+      if (r.undo) { var b = document.createElement('button'); b.type = 'button'; b.className = 'tbtn'; b.textContent = 'Undo'; b.addEventListener('click', function () { try { r.undo(); } catch (e) {} sp.textContent = 'Undone'; d.className = 'logrow'; b.remove(); }); d.appendChild(b); }
+      host.insertBefore(d, host.firstChild);
+      if (opts.beep !== false) beep(r.cls === 'bad');
+    }
+    function beep(bad) {
+      try {
+        if (navigator.vibrate) navigator.vibrate(bad ? [40, 40, 40] : 25);
+        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        var c = state.ac || (state.ac = new AC()), o = c.createOscillator(), g = c.createGain();
+        o.frequency.value = bad ? 220 : 880; g.gain.value = 0.08; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.1);
+      } catch (e) {}
+    }
+    $('#scanClose').addEventListener('click', function () { var d = opts.onDone; stop(); if (d) d(); });
+    $('#scanTypeGo').addEventListener('click', function () { found($('#scanType').value); $('#scanType').value = ''; });
+    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); found($('#scanType').value); $('#scanType').value = ''; } });
     $('#scanPhoto').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0]; e.target.value = '';
       if (!f) return;

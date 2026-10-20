@@ -507,3 +507,12 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 #zSplitBox .inrow { flex-wrap: wrap; }
 #zSplitBox .inrow .btn { flex: 1 1 40%; }
 .mapcv.grabbed { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: 22px; }
+
+.scanhead { width: 100%; max-width: 480px; display: grid; gap: 2px; text-align: center; }
+.scanhead span { font-size: 13px; opacity: .75; }
+.scanlog { width: 100%; max-width: 480px; display: grid; gap: 6px; max-height: 26vh; overflow: auto; }
+.logrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.1); font-size: 14px; }
+.logrow.ok { background: rgba(60,200,120,.25); }
+.logrow.bad { background: rgba(255,80,80,.28); }
+.scanov.cont .scanbox { max-width: 340px; }
+.scanov .btn.ghost { color: #fff; background: rgba(255,255,255,.14); }

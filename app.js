@@ -628,6 +628,60 @@
     setSearch(scanCode);
     toast('Linked to ' + upd.brand);
   });
+  /* Stock a shelf: pick a spot, scan bottles one after another, and each one is moved to that spot. */
+  var stockCtx = null;
+  function placeAt(it, c) {
+    var raw = rawOf(it);
+    if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; }
+    else {
+      raw.places = (raw.places || []).filter(function (p) { return p.m !== c.m; });
+      raw.places.push({ m: c.m, section: c.section, shelf: c.shelf });
+    }
+    return mk(raw);
+  }
+  function whereAt(it, c) {
+    if (!c.m || c.m === 'main') return { section: it.section || '', shelf: it.shelf || '' };
+    var p = (it.places || []).filter(function (x) { return x.m === c.m; })[0];
+    return p ? { section: p.section || '', shelf: p.shelf || '' } : { section: '', shelf: '' };
+  }
+  function openStock() {
+    var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    $('#stMapField').hidden = ms.length < 2;
+    $('#stMap').innerHTML = ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
+    $('#stockScrim').hidden = false;
+    setTimeout(function () { $('#stSection').focus(); }, 40);
+  }
+  function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + c.shelf : ''); }
+  $('#stockBtn').addEventListener('click', openStock);
+  $('#stockClose').addEventListener('click', function () { $('#stockScrim').hidden = true; });
+  $('#stockForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var section = norm($('#stSection').value), shelf = norm($('#stShelf').value);
+    if (!section) { toast('Type the aisle or section first.'); return; }
+    var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main');
+    var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m) };
+    if (!window.ShelfScan) return;
+    var unknown = [], placed = 0;
+    $('#stockScrim').hidden = true;
+    window.ShelfScan.open(function (code) {
+      var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
+      if (!hit.length) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad' }; }
+      var it = hit[0], name = it.brand + (it.flavor ? ' ' + it.flavor : ''), w = whereAt(it, c);
+      if (w.section.toLowerCase() === c.section.toLowerCase() && String(w.shelf) === String(c.shelf)) return { text: name + ' is already here' };
+      var before = it, upd = placeAt(it, c);
+      try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return { text: 'Could not save ' + name, cls: 'bad' }; }
+      placed++;
+      return { text: name + ' added', cls: 'ok', undo: function () { try { save(placeAt(before, { m: c.m, section: w.section, shelf: w.shelf })); placed--; } catch (err) {} } };
+    }, {
+      continuous: true, doneText: 'Done',
+      head: '<b>' + esc(stockSpotLabel(c)) + '</b><span>Scan each bottle on this shelf</span>',
+      onDone: function () {
+        toast(placed + ' bottle' + (placed === 1 ? '' : 's') + ' put on ' + stockSpotLabel(c) + (unknown.length ? '. ' + unknown.length + ' not in your list: ' + unknown.slice(0, 3).join(', ') + (unknown.length > 3 ? '...' : '') : ''));
+        $('#stShelf').value = '';
+        openStock();
+      }
+    });
+  });
   $('#importBtn').addEventListener('click', openImport);
   $('#importUpdateOnly').addEventListener('change', fillMapper);
   $('#importText').addEventListener('input', function () { if ($('#importUpdateOnly').checked) fillMapper(); });
@@ -690,7 +744,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v58';
+  var APP_VERSION = 'v59';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

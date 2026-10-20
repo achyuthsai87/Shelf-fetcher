@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=58">
+<link rel="stylesheet" href="style.css?v=59">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -41,6 +41,7 @@
 
   <section class="tabpane" id="tab-browse">
     <h1>Browse</h1>
+    <button class="btn" id="stockBtn" type="button">Stock a shelf by scanning</button>
     <div id="browseHost"></div>
   </section>
 
@@ -203,6 +204,20 @@
   </form>
 </div>
 
+<div class="scrim" id="stockScrim" hidden>
+  <form class="sheet" id="stockForm" autocomplete="off">
+    <h2>Stock a shelf</h2>
+    <p class="hint">Pick the spot, then scan each bottle on it. Every bottle you scan is moved to that spot. Tap Done when the shelf is finished.</p>
+    <div class="field full" id="stMapField" hidden><label for="stMap">Map</label><select id="stMap"></select></div>
+    <div class="field full"><label for="stSection">Aisle or section</label><input id="stSection" list="dl-sections" placeholder="Aisle 3" autocapitalize="characters"></div>
+    <div class="field full"><label for="stShelf">Shelf (0 = on top, blank = none)</label><input id="stShelf" inputmode="numeric" placeholder="2"></div>
+    <div class="sheet-actions">
+      <button class="btn grow" type="submit">Start scanning</button>
+      <button class="btn ghost" id="stockClose" type="button">Close</button>
+    </div>
+  </form>
+</div>
+
 <div class="scrim" id="linkScrim" hidden>
   <div class="sheet" id="linkSheet">
     <h2>New barcode</h2>
@@ -261,11 +276,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=58"></script>
-<script src="app.js?v=58"></script>
-<script src="photo.js?v=58"></script>
-<script src="scan.js?v=58"></script>
-<script src="map.js?v=58"></script>
-<script src="backup.js?v=58"></script>
+<script src="search.js?v=59"></script>
+<script src="app.js?v=59"></script>
+<script src="photo.js?v=59"></script>
+<script src="scan.js?v=59"></script>
+<script src="map.js?v=59"></script>
+<script src="backup.js?v=59"></script>
 </body>
 </html>
