@@ -208,51 +208,58 @@
         }).sort(function (p, q) { return p.t - q.t; });
 
         faces.forEach(function (f) {
-          var A = f.c[0], B = f.c[1];
-          var pts = [P(A[0], A[1], 0), P(B[0], B[1], 0), P(B[0], B[1], Z), P(A[0], A[1], Z)];
+          var FA = f.c[0], FB = f.c[1];
           /* Only faces that look toward the camera are drawn, so from one side you never see the shelves of the other side. */
-          var ar = 0, ai;
-          for (ai = 0; ai < 4; ai++) { var pa = pts[ai], pb = pts[(ai + 1) % 4]; ar += pa.X * pb.Y - pb.X * pa.Y; }
-          if (ar <= 0) return;
-          /* A face pressed against a neighbouring box (the divider, or the parts of one box) is inside, not a side. */
-          var inner = false;
+          var fp = [P(FA[0], FA[1], 0), P(FB[0], FB[1], 0), P(FB[0], FB[1], Z), P(FA[0], FA[1], Z)], far = 0, ai;
+          for (ai = 0; ai < 4; ai++) { var pa = fp[ai], pb = fp[(ai + 1) % 4]; far += pa.X * pb.Y - pb.X * pa.Y; }
+          if (far <= 0) return;
+          /* Only the part of a face pressed against a neighbouring box is inside; the rest of it is still a side. */
+          var alongX = FA[1] === FB[1], lo = alongX ? Math.min(FA[0], FB[0]) : Math.min(FA[1], FB[1]), hi = alongX ? Math.max(FA[0], FB[0]) : Math.max(FA[1], FB[1]);
+          var cover = [];
           zones.forEach(function (q) {
-            if (inner || q === z || zoneH(q) < Z - 0.002) return;
+            if (q === z || zoneH(q) < Z - 0.002) return;
             var qx1 = q.x + q.w, qy1 = q.y + q.h, tol = 0.004;
-            if (A[1] === B[1]) {
-              var yy = A[1];
-              if (Math.min(x1, qx1) - Math.max(x0, q.x) > 0.5 * Math.min(z.w, q.w) &&
-                ((yy === y0 && Math.abs(qy1 - yy) < tol) || (yy === y1 && Math.abs(q.y - yy) < tol))) inner = true;
+            if (alongX) {
+              var yy = FA[1];
+              if ((yy === y0 && Math.abs(qy1 - yy) < tol) || (yy === y1 && Math.abs(q.y - yy) < tol)) cover.push([Math.max(lo, q.x), Math.min(hi, qx1)]);
             } else {
-              var xx = A[0];
-              if (Math.min(y1, qy1) - Math.max(y0, q.y) > 0.5 * Math.min(z.h, q.h) &&
-                ((xx === x0 && Math.abs(qx1 - xx) < tol) || (xx === x1 && Math.abs(q.x - xx) < tol))) inner = true;
+              var xx = FA[0];
+              if ((xx === x0 && Math.abs(qx1 - xx) < tol) || (xx === x1 && Math.abs(q.x - xx) < tol)) cover.push([Math.max(lo, q.y), Math.min(hi, qy1)]);
             }
           });
-          if (inner) return;
-          ctx.fillStyle = f.col;
-          poly(ctx, pts);
-          ctx.fill();
-          if (sel && st.selLevel !== undefined) {
-            var lv = st.selLevel ? Math.min(Math.max(st.selLevel, 1), n) : 0;
-            if (lv && n > 1) {
-              var za = st.topFirst ? Z * (1 - lv / n) : Z * (lv - 1) / n, zb = st.topFirst ? Z * (1 - (lv - 1) / n) : Z * lv / n;
-              ctx.fillStyle = pal.hi;
-              ctx.globalAlpha = 0.85;
-              poly(ctx, [P(A[0], A[1], za), P(B[0], B[1], za), P(B[0], B[1], zb), P(A[0], A[1], zb)]);
-              ctx.fill();
-              ctx.globalAlpha = 1;
+          cover = cover.filter(function (c) { return c[1] - c[0] > 0.002; }).sort(function (p1, p2) { return p1[0] - p2[0]; });
+          var segs = [], cur = lo;
+          cover.forEach(function (c) { if (c[0] - cur > 0.01) segs.push([cur, c[0]]); if (c[1] > cur) cur = c[1]; });
+          if (hi - cur > 0.01) segs.push([cur, hi]);
+          var rev = alongX ? FA[0] > FB[0] : FA[1] > FB[1];
+          segs.forEach(function (sg) {
+            var u = rev ? sg[1] : sg[0], v = rev ? sg[0] : sg[1];
+            var A = alongX ? [u, FA[1]] : [FA[0], u], B = alongX ? [v, FA[1]] : [FA[0], v];
+            var pts = [P(A[0], A[1], 0), P(B[0], B[1], 0), P(B[0], B[1], Z), P(A[0], A[1], Z)];
+            ctx.fillStyle = f.col;
+            poly(ctx, pts);
+            ctx.fill();
+            if (sel && st.selLevel !== undefined) {
+              var lv = st.selLevel ? Math.min(Math.max(st.selLevel, 1), n) : 0;
+              if (lv && n > 1) {
+                var za = st.topFirst ? Z * (1 - lv / n) : Z * (lv - 1) / n, zb = st.topFirst ? Z * (1 - (lv - 1) / n) : Z * lv / n;
+                ctx.fillStyle = pal.hi;
+                ctx.globalAlpha = 0.85;
+                poly(ctx, [P(A[0], A[1], za), P(B[0], B[1], za), P(B[0], B[1], zb), P(A[0], A[1], zb)]);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+              }
             }
-          }
-          ctx.strokeStyle = pal.line;
-          ctx.lineWidth = 1;
-          for (var k = 1; k < n; k++) {
-            var zz = Z * k / n, l1 = P(A[0], A[1], zz), l2 = P(B[0], B[1], zz);
-            ctx.beginPath(); ctx.moveTo(l1.X, l1.Y); ctx.lineTo(l2.X, l2.Y); ctx.stroke();
-          }
-          ctx.strokeStyle = pal.edge;
-          poly(ctx, pts);
-          ctx.stroke();
+            ctx.strokeStyle = pal.line;
+            ctx.lineWidth = 1;
+            for (var k = 1; k < n; k++) {
+              var zz = Z * k / n, l1 = P(A[0], A[1], zz), l2 = P(B[0], B[1], zz);
+              ctx.beginPath(); ctx.moveTo(l1.X, l1.Y); ctx.lineTo(l2.X, l2.Y); ctx.stroke();
+            }
+            ctx.strokeStyle = pal.edge;
+            poly(ctx, pts);
+            ctx.stroke();
+          });
         });
 
         var top = [P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)];
