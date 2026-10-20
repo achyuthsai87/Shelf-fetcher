@@ -416,7 +416,8 @@
     if (focusDot && z && last.dot && !edit) {
       focusDot = false;
       var f = 2.2, ccx = W / 2, ccy = H / 2;
-      zoom = f; panX = -(last.dot.X - ccx) * f; panY = -(last.dot.Y - ccy) * f;
+      var z0 = zoom || 1, bx = (last.dot.X - panX - ccx) / z0, by = (last.dot.Y - panY - ccy) / z0;
+      zoom = f; panX = -bx * f; panY = -by * f;
       paint();
       return;
     }
