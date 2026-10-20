@@ -5,7 +5,7 @@
    Nothing here ever leaves the phone unless you save the file. */
 (function (root) {
   'use strict';
-  var LB = 'shelf-finder-lastbackup-v1', B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
+  var LV = 'shelf-finder-lastver-v1', LF = 'shelf-finder-forcenudge-v1', LB = 'shelf-finder-lastbackup-v1', B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
   var $ = function (s) { return document.querySelector(s); };
   function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function counts(b, m) {
@@ -53,34 +53,39 @@
     location.reload();
   }
 
-  function hash() {
-    var s = (get(B) || '') + '|' + (get(M) || ''), h = 5381, i;
-    for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-    return String(h);
+  function djb(s) { var h = 5381, i; for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h); }
+  function sigs() {
+    var it = {}, zs = {};
+    try { (JSON.parse(get(B) || '[]') || []).forEach(function (x) { it[x.id] = djb([x.brand, x.flavor, x.type, x.size, x.section, x.shelf, x.notes].join('\u0001')); }); } catch (e) {}
+    try { var mm = JSON.parse(get(M) || 'null'); ((mm && mm.zones) || []).forEach(function (z) { zs[z.id] = djb([z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind].join('\u0001')); }); } catch (e) {}
+    return { i: it, z: zs };
   }
   function lastBackup() { try { return JSON.parse(get(LB) || 'null'); } catch (e) { return null; } }
   function markBackedUp() {
-    var c = counts(get(B), get(M));
-    try { localStorage.setItem(LB, JSON.stringify({ t: Date.now(), h: hash(), n: c.n, z: c.z })); } catch (e) {}
+    var c = counts(get(B), get(M)), s = sigs();
+    try { localStorage.setItem(LB, JSON.stringify({ t: Date.now(), n: c.n, z: c.z, i: s.i, zs: s.z })); localStorage.removeItem(LF); } catch (e) {}
     status();
   }
-  function stale() {
-    var c = counts(get(B), get(M)), lb = lastBackup();
-    if (!c.n) return false;
-    if (!lb) return c.n >= 10;
-    return lb.h !== hash() && Date.now() - lb.t > 2 * 24 * 3600 * 1000;
+  /* How many bottles or sections were added or changed since the last backup. */
+  function changes() {
+    var lb = lastBackup(), s = sigs(), n = 0, k;
+    for (k in s.i) if (!lb || !lb.i || lb.i[k] !== s.i[k]) n++;
+    for (k in s.z) if (!lb || !lb.zs || lb.zs[k] !== s.z[k]) n++;
+    return n;
   }
+  var REMIND_AT = 5;
+  function stale() { return changes() >= REMIND_AT; }
   function status() {
-    var el = $('#backupStatus'), lb = lastBackup(), c = counts(get(B), get(M));
+    var el = $('#backupStatus'), lb = lastBackup(), ch = changes();
     if (el) {
-      if (!lb) el.textContent = 'No backup saved yet.';
-      else el.textContent = 'Last backup: ' + when(lb.t) + ' (' + lb.n + ' bottles). ' + (lb.h === hash() ? 'Nothing has changed since.' : 'You have changes since then.');
+      var tail = ch ? ch + ' bottle or section change' + (ch === 1 ? '' : 's') + ' since then.' : 'Nothing has changed since.';
+      el.textContent = lb ? 'Last backup: ' + when(lb.t) + ' (' + lb.n + ' bottles). ' + tail : 'No backup saved yet. ' + (ch ? ch + ' bottle or section change' + (ch === 1 ? '' : 's') + ' not backed up.' : '');
     }
     var nd = $('#backupNudge');
     if (nd) {
-      var show = stale();
+      var show = ch >= REMIND_AT || (ch > 0 && get(LF) === '1');
       nd.hidden = !show;
-      if (show) nd.textContent = lb ? 'Your changes are not backed up yet. Tap to save a backup.' : 'Your list is not backed up yet. Tap to save a backup.';
+      if (show) nd.textContent = ch + ' new or changed bottle' + (ch === 1 ? '' : 's') + ' and section' + (ch === 1 ? '' : 's') + ' not backed up. Tap to save a backup.';
     }
   }
   function saveFile() {
@@ -134,6 +139,11 @@
     nudge.addEventListener('click', saveFile);
     var hero = document.querySelector('#tab-find .hero');
     if (hero && hero.parentNode) hero.parentNode.insertBefore(nudge, hero.nextSibling);
+    /* After an app update, keep reminding until a backup is saved. */
+    try {
+      var sc = document.querySelector('script[src*="backup.js"]'), mv = sc && /[?&]v=(\d+)/.exec(sc.getAttribute('src')), cur = mv ? mv[1] : '', old = get(LV);
+      if (cur && old !== cur) { localStorage.setItem(LV, cur); if (old && changes() > 0) localStorage.setItem(LF, '1'); }
+    } catch (e) {}
     status();
     document.addEventListener('visibilitychange', function () { if (!document.hidden) status(); });
     setInterval(status, 60000);
