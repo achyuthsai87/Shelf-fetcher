@@ -392,6 +392,11 @@
     if (e.key === 'Escape') { $('#sheetScrim').hidden = true; $('#importScrim').hidden = true; }
   });
 
+  window.ShelfApp = {
+    items: function () { return items; },
+    openAdd: function (pre) { openSheet(null, Object.assign({}, carry, pre || {})); }
+  };
+
   /* Start */
   items = loadLocal();
   renderAll();

@@ -27,7 +27,10 @@
       <div class="hero-sub" id="heroSub">Add your first bottle to get started</div>
     </div>
     <div class="searchbar">
-      <input class="search" id="search" type="search" placeholder="Search brand, flavor, type, aisle" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search bottles">
+      <div class="searchrow">
+        <input class="search" id="search" type="search" placeholder="Search brand, flavor, type, aisle" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search bottles">
+        <button class="camfab" id="photoBtn" type="button" aria-label="Find by photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      </div>
       <div class="chips" id="chips" role="group" aria-label="Filter by type"></div>
     </div>
     <ul class="list" id="list"></ul>
@@ -105,7 +108,33 @@
   </form>
 </div>
 
+<div class="scrim" id="photoScrim" hidden>
+  <div class="sheet" role="dialog" aria-label="Find by photo">
+    <h2>Find by photo</h2>
+    <p class="hint">The label is read on this phone. The picture is never saved or sent anywhere, and it is wiped the moment the match is found.</p>
+    <div class="stage" id="photoStage" hidden>
+      <video id="camVideo" playsinline muted hidden></video>
+      <canvas id="photoCanvas" hidden></canvas>
+    </div>
+    <div class="sheet-actions" id="camControls" hidden>
+      <button class="btn grow" id="snapBtn" type="button">Snap</button>
+      <button class="btn ghost" id="camCancel" type="button">Cancel</button>
+    </div>
+    <div class="photo-choices" id="photoChoices">
+      <button class="btn" id="camBtn" type="button">Take photo</button>
+      <button class="btn ghost" id="pasteBtn" type="button">Paste photo</button>
+      <button class="btn ghost" id="uploadBtn" type="button">Upload photo</button>
+      <input id="photoFile" type="file" accept="image/*" hidden>
+    </div>
+    <div class="pastebox" id="pasteBox" contenteditable="true" role="textbox" aria-label="Paste a picture here" inputmode="none" spellcheck="false">Or hold here and tap Paste</div>
+    <p class="hint" id="photoStatus" role="status" hidden></p>
+    <div id="photoResults"></div>
+    <div class="sheet-actions"><button class="btn ghost grow" id="photoClose" type="button">Close</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="app.js"></script>
+<script src="photo.js"></script>
 </body>
 </html>
