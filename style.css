@@ -525,3 +525,7 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .popbtns .grow { flex: 1; }
 .popin { width: 100%; }
 #stockBtn { display: block; width: 100%; margin: 4px 0 14px; }
+.scanrow { align-items: stretch; }
+.scanrow .btn, .scanrow .scanpick { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 54px; margin: 0; }
+.scanrow input { min-height: 54px; box-sizing: border-box; }
+.scanrow input { padding: 0 16px; border-radius: 14px; font-size: 16px; }
