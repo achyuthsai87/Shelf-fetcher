@@ -1,6 +1,6 @@
 // Network-first so updates arrive when online; falls back to the cache offline.
 // Bump CACHE when changing any cached file.
-var CACHE = 'shelf-finder-v7';
+var CACHE = 'shelf-finder-v8';
 var ASSETS = ['./', './index.html', './style.css', './app.js', './photo.js', './map.js', './starter-layout.json', './starter-plan.jpg', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

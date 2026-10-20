@@ -427,6 +427,18 @@
       });
     }
   } catch (e) {}
+  var APP_VERSION = 'v8';
+  $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
+  $('#updateBtn').addEventListener('click', function () {
+    var b = this;
+    b.textContent = 'Updating...';
+    b.disabled = true;
+    var regs = 'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve();
+    var cs = window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : Promise.resolve();
+    Promise.all([regs, cs]).catch(function () {}).then(function () {
+      location.replace(location.pathname + '?u=' + Date.now());
+    });
+  });
   if ('serviceWorker' in navigator) {
     var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });
