@@ -329,7 +329,8 @@
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
   var focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
-  var tapStart = null, lastTapUp = 0;
+  var tapStart = null, lastTapUp = 0, holdTimer = null;
+  function clearHold() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } var w = $('#mapCv'); if (w) w.classList.remove('grabbed'); }
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -517,7 +518,7 @@
           ? 'Sections still to place: ' + un.map(function (n) { return '<button class="chip" type="button" data-pend="' + esc(n) + '" aria-pressed="' + (pendingName === n) + '">' + esc(n) + '</button>'; }).join(' ')
           : (map.zones.length ? 'Every section in your list is on the map.' : '');
       }
-      $('#mapCv').style.touchAction = 'none';
+      $('#mapCv').style.touchAction = edit ? 'pan-y' : 'none';
     }
     caption();
     schedule();
@@ -712,7 +713,16 @@
         if (uv.u >= z.x && uv.u <= z.x + z.w && uv.v >= z.y && uv.v <= z.y + z.h) { hit = z; mode = 'move'; break; }
       }
     }
-    drawing = { mode: mode, zone: hit, sx: p.x, sy: p.y, start: uv, moved: false, orig: hit ? { x: hit.x, y: hit.y, w: hit.w, h: hit.h } : null, rect: { x: uv.u, y: uv.v, w: 0, h: 0 } };
+    drawing = { mode: mode, zone: hit, sx: p.x, sy: p.y, start: uv, moved: false, armed: e.pointerType === 'mouse', orig: hit ? { x: hit.x, y: hit.y, w: hit.w, h: hit.h } : null, rect: { x: uv.u, y: uv.v, w: 0, h: 0 } };
+    /* On a touch screen a plain swipe scrolls the page. Boxes only move, resize or get drawn after a short press and hold. */
+    if (!drawing.armed) {
+      var dd = drawing;
+      clearHold();
+      holdTimer = setTimeout(function () {
+        holdTimer = null;
+        if (drawing === dd && !dd.moved) { dd.armed = true; $('#mapCv').classList.add('grabbed'); try { if (navigator.vibrate) navigator.vibrate(20); } catch (x) {} }
+      }, 380);
+    }
   }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function onMove(e) {
@@ -747,6 +757,7 @@
       return;
     }
     if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 6) drawing.moved = true;
+    if (!drawing.armed) { if (drawing.moved) { clearHold(); drawing = null; } return; }
     if (!drawing.moved) return;
     var uv = unproject(p.x, p.y), d = drawing;
     if (d.mode === 'draw') {
@@ -768,6 +779,7 @@
       if (Object.keys(pointers).length < 2) { pinch = null; fast = false; if (!Object.keys(pointers).length) drawing = null; schedule(); }
       return;
     }
+    clearHold();
     if (!drawing) return;
     var d = drawing;
     drawing = null;
@@ -795,10 +807,11 @@
     extras = loadExtras(); cur = 'main';
     map = loadMap(); calcCold(map);
     var cv = $('#mapCanvas');
+    cv.addEventListener('touchmove', function (e) { if (edit && drawing && drawing.armed && e.cancelable) e.preventDefault(); }, { passive: false });
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
-    cv.addEventListener('pointercancel', function (e) { delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
+    cv.addEventListener('pointercancel', function (e) { clearHold(); if (drawing && drawing.zone && drawing.orig && drawing.armed) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; } delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
     cv.addEventListener('wheel', function (e) { if (!map || !imgEl) return; e.preventDefault(); var p = pt(e); setZoom(zoom * Math.exp(-e.deltaY * 0.002), p.x, p.y); }, { passive: false });
     $('#mapZoomIn').addEventListener('click', function () { setZoom(zoom * 1.6); });
     $('#mapZoomOut').addEventListener('click', function () { setZoom(zoom / 1.6); });
