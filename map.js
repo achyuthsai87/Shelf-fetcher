@@ -407,7 +407,7 @@
     if (has) {
       $('#mapEditBtn').textContent = edit ? 'Done' : 'Edit sections';
       $('#mapEditHelp').hidden = !edit;
-      $('#mapTilt').disabled = edit;
+      $('#mapTilt').disabled = edit; $('#mapTurn').disabled = edit;
       $('#segTop').setAttribute('aria-pressed', String(map.topFirst !== false));
       $('#segBottom').setAttribute('aria-pressed', String(map.topFirst === false));
       $('#segClean').setAttribute('aria-pressed', String(map.look !== 'photo'));
@@ -542,8 +542,7 @@
       return;
     }
     if (!edit) tapStart = { t: Date.now(), x: p.x, y: p.y };
-    if (!edit && zoom > 1) { drawing = { mode: 'pan', x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
-    if (!edit) { drawing = { mode: 'orbit', x: p.x, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
+    if (!edit) { drawing = { mode: 'pan', x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
     var uv = unproject(p.x, p.y), hit = null, mode = 'draw', i, z;
     for (i = map.zones.length - 1; i >= 0; i--) {
       z = map.zones[i];
@@ -692,7 +691,8 @@
       if (edit) { savedView = { yaw: yaw, elev: elev }; sel = sel; } else restoreView();
       refresh();
     });
-    $('#mapResetBtn').addEventListener('click', function () { zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI); schedule(); });
+    $('#mapResetBtn').addEventListener('click', function () { zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI); $('#mapTurn').value = 0; schedule(); });
+    $('#mapTurn').addEventListener('input', function (e) { yaw = parseFloat(e.target.value) * Math.PI / 180; fast = true; schedule(); clearTimeout(init.t2); init.t2 = setTimeout(function () { fast = false; schedule(); }, 180); });
     $('#mapTilt').addEventListener('input', function (e) { elev = parseFloat(e.target.value) * Math.PI / 180; fast = true; schedule(); clearTimeout(init.t); init.t = setTimeout(function () { fast = false; schedule(); }, 180); });
     $('#segClean').addEventListener('click', function () { map.look = 'clean'; persist(); refresh(); });
     $('#segPhoto').addEventListener('click', function () { map.look = 'photo'; persist(); refresh(); });
