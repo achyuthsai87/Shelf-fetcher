@@ -56,11 +56,18 @@
   }
 
   function djb(s) { var h = 5381, i; for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h); }
+  /* Shelf sections and box height count too, but only when set, so older backups still compare equal. */
+  function zsig(z) {
+    var a = [z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind];
+    if (z.cells) a.push('c' + JSON.stringify(z.cells));
+    if (z.hs) a.push('h' + z.hs);
+    return a.join('\u0001');
+  }
   function sigs() {
     var it = {}, zs = {};
     try { (JSON.parse(get(B) || '[]') || []).forEach(function (x) { it[x.id] = djb([x.brand, x.flavor, x.type, x.size, x.section, x.shelf, x.notes, JSON.stringify(x.places || [])].join('\u0001')); }); } catch (e) {}
-    try { var mm = JSON.parse(get(M) || 'null'); ((mm && mm.zones) || []).forEach(function (z) { zs[z.id] = djb([z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind].join('\u0001')); }); } catch (e) {}
-    try { (JSON.parse(get(X) || '[]') || []).forEach(function (q) { ((q && q.zones) || []).forEach(function (z) { zs[q.id + ':' + z.id] = djb([z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind].join('\u0001')); }); zs[q.id + ':map'] = djb(String(q.name) + (q.img ? q.img.length : 0)); }); } catch (e) {}
+    try { var mm = JSON.parse(get(M) || 'null'); ((mm && mm.zones) || []).forEach(function (z) { zs[z.id] = djb(zsig(z)); }); } catch (e) {}
+    try { (JSON.parse(get(X) || '[]') || []).forEach(function (q) { ((q && q.zones) || []).forEach(function (z) { zs[q.id + ':' + z.id] = djb(zsig(z)); }); zs[q.id + ':map'] = djb(String(q.name) + (q.img ? q.img.length : 0)); }); } catch (e) {}
     return { i: it, z: zs };
   }
   function lastBackup() { try { return JSON.parse(get(LB) || 'null'); } catch (e) { return null; } }

@@ -47,7 +47,7 @@
     var msg = $('#scanMsg');
     function found(code) {
       if (!state || state.done || state.dead || state.hold) return;
-      code = String(code || '').replace(/\s+/g, '');
+      code = String(code || '').trim(); if (code.indexOf('SF1|') !== 0) code = code.replace(/\s+/g, '');
       if (!code) return;
       if (opts.continuous) {
         var now = Date.now();
@@ -80,8 +80,8 @@
       } catch (e) {}
     }
     $('#scanClose').addEventListener('click', function () { var d = opts.onDone; stop(); if (d) d(); });
-    $('#scanTypeGo').addEventListener('click', function () { found($('#scanType').value); $('#scanType').value = ''; });
-    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); found($('#scanType').value); $('#scanType').value = ''; } });
+    $('#scanTypeGo').addEventListener('click', function () { var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; });
+    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; } });
     $('#scanPhoto').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0]; e.target.value = '';
       if (!f) return;
@@ -102,7 +102,7 @@
       msg.textContent = 'Point the camera at the barcode.';
       if (root.BarcodeDetector) {
         var det;
-        try { det = new root.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] }); } catch (e) { det = null; }
+        try { det = new root.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'] }); } catch (e) { det = null; }
         if (det) {
           state.timer = setInterval(function () {
             if (!state || state.done || video.readyState < 2) return;
@@ -114,7 +114,7 @@
       loadLib().then(function (Z) {
         if (!state || state.dead) return;
         var hints = new Map();
-        hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF]);
+        hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE]);
         hints.set(Z.DecodeHintType.TRY_HARDER, true);
         var rd = new Z.MultiFormatReader(); rd.setHints(hints);
         var cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
@@ -134,5 +134,5 @@
     });
   }
 
-  root.ShelfScan = { open: open, close: stop, hold: function (b) { if (state) state.hold = !!b; }, log: function (r) { if (state && state.addLog) state.addLog(r); } };
+  root.ShelfScan = { open: open, close: stop, hold: function (b) { if (state) state.hold = !!b; }, setHead: function (html) { var e = document.querySelector('#scanOv .scanhead'); if (e) e.innerHTML = html; }, log: function (r) { if (state && state.addLog) state.addLog(r); } };
 })(typeof window !== 'undefined' ? window : globalThis);

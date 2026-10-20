@@ -98,27 +98,50 @@
   }
 
   /* Straighten a rough layout: snap to a grid, then make nearly equal sizes exactly equal. */
+  /* Boxes that sit on top of each other (touching edges are fine). */
+  function overlapPairs(zones) {
+    var out = [], t = 0.004, i, k;
+    for (i = 0; i < zones.length; i++) for (k = i + 1; k < zones.length; k++) {
+      var a = zones[i], b = zones[k];
+      var w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (w > t && h > t) out.push([a, b]);
+    }
+    return out;
+  }
+  function overlapsAny(z, zones) {
+    var t = 0.004;
+    return zones.some(function (b) {
+      if (b === z) return false;
+      var w = Math.min(z.x + z.w, b.x + b.w) - Math.max(z.x, b.x), h = Math.min(z.y + z.h, b.y + b.h) - Math.max(z.y, b.y);
+      return w > t && h > t;
+    });
+  }
+  /* Straighten the layout: edges snap to a fine grid, and boxes of nearly the same size are made the same size, but only where that does not push a box onto its neighbour. */
   function tidyZones(zones) {
-    var g = 0.02;
+    var g = 0.005;
     function snap(v) { return Math.round(v / g) * g; }
     function r4(v) { return Math.round(v * 10000) / 10000; }
     zones.forEach(function (z) {
       var x0 = Math.max(0, snap(z.x)), y0 = Math.max(0, snap(z.y));
       var x1 = Math.min(1, snap(z.x + z.w)), y1 = Math.min(1, snap(z.y + z.h));
-      z.x = x0; z.y = y0;
-      z.w = Math.max(g, x1 - x0);
-      z.h = Math.max(g, y1 - y0);
+      var old = { x: z.x, y: z.y, w: z.w, h: z.h };
+      z.x = x0; z.y = y0; z.w = Math.max(g, x1 - x0); z.h = Math.max(g, y1 - y0);
+      if (overlapsAny(z, zones) && !(function () { z.x = old.x; z.y = old.y; z.w = old.w; z.h = old.h; var r = overlapsAny(z, zones); z.x = x0; z.y = y0; z.w = Math.max(g, x1 - x0); z.h = Math.max(g, y1 - y0); return r; })()) { z.x = old.x; z.y = old.y; z.w = old.w; z.h = old.h; }
     });
     ['w', 'h'].forEach(function (key) {
       var byKind = {};
       zones.forEach(function (z) { var k = z.kind || 'tall'; (byKind[k] = byKind[k] || []).push(z); });
       Object.keys(byKind).forEach(function (k) {
-        var sorted = byKind[k].sort(function (a, b) { return a[key] - b[key]; }), group = [];
+        var sorted = byKind[k].slice().sort(function (a, b) { return a[key] - b[key]; }), group = [];
         var flush = function () {
           if (!group.length) return;
           var mean = group.reduce(function (t, z) { return t + z[key]; }, 0) / group.length;
           var v = Math.max(g, snap(mean));
-          group.forEach(function (z) { z[key] = Math.min(v, 1 - (key === 'w' ? z.x : z.y)); });
+          group.forEach(function (z) {
+            var was = z[key], had = overlapsAny(z, zones);
+            z[key] = Math.min(v, 1 - (key === 'w' ? z.x : z.y));
+            if (!had && overlapsAny(z, zones)) z[key] = was;
+          });
           group = [];
         };
         sorted.forEach(function (z) {
@@ -132,8 +155,7 @@
     return zones;
   }
 
-  /* Coolers look icy teal and freezers pale blue, so they stand out from the shelves. */
-  function kindPal(kind, dark, base) {
+    function kindPal(kind, dark, base) {
     if (kind === 'cooler') return dark ? { top: 'rgba(105,205,230,0.92)', a: 'rgba(60,150,185,0.96)', b: 'rgba(42,120,155,0.96)' } : { top: 'rgba(80,190,215,0.94)', a: 'rgba(40,140,175,0.96)', b: 'rgba(28,112,150,0.96)' };
     if (kind === 'freezer') return dark ? { top: 'rgba(200,228,255,0.92)', a: 'rgba(130,170,225,0.96)', b: 'rgba(100,140,200,0.96)' } : { top: 'rgba(176,214,250,0.96)', a: 'rgba(104,150,215,0.97)', b: 'rgba(80,124,190,0.97)' };
     return base;
@@ -183,9 +205,10 @@
     if (st.edit) {
       zones.forEach(function (z) {
         var a = P(z.x, z.y, 0), b = P(z.x + z.w, z.y + z.h, 0);
-        ctx.fillStyle = pal.flat;
-        ctx.strokeStyle = pal.flatLine;
-        ctx.lineWidth = 2;
+        var bad = st.overlapIds && st.overlapIds[z.id];
+        ctx.fillStyle = bad ? 'rgba(235,70,70,0.30)' : pal.flat;
+        ctx.strokeStyle = bad ? '#eb4646' : pal.flatLine;
+        ctx.lineWidth = bad ? 3 : 2;
         ctx.fillRect(a.X, a.Y, b.X - a.X, b.Y - a.Y);
         ctx.strokeRect(a.X, a.Y, b.X - a.X, b.Y - a.Y);
         ctx.fillStyle = pal.flatLine;
@@ -397,10 +420,12 @@
     return m ? (m.name || 'Map') : 'Map';
   }
   /* Where a bottle sits on one map: the main store map uses its Aisle and Shelf, every other map uses its places list. */
-  function spot(it, id) {
+  function spot(it, id, pi) {
     id = id || cur;
-    if (id === 'main') return { section: it.section || '', shelf: it.shelf || '' };
-    var p = (it.places || []).filter(function (x) { return x.m === id; })[0];
+    var pl = it.places || [], p = null;
+    if (pi != null && pl[pi] && pl[pi].m === id) p = pl[pi];
+    else if (id === 'main' && (it.section || it.shelf)) return { section: it.section || '', shelf: it.shelf || '' };
+    else p = pl.filter(function (x) { return x.m === id; })[0] || null;
     return p ? { section: p.section || '', shelf: p.shelf || '' } : { section: '', shelf: '' };
   }
   var toastTimer = null;
@@ -487,7 +512,7 @@
       img: imgEl, imgW: imgEl.naturalWidth, imgH: imgEl.naturalHeight, aspect: imgEl.naturalWidth / imgEl.naturalHeight,
       zones: map.zones, yaw: yaw, elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
       zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, selSlot: z ? sel.slot : 0, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
-      dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast
+      dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast, overlapIds: edit ? overlapIdMap() : null
     });
     if (focusDot && z && last.dot && !edit) {
       focusDot = false;
@@ -502,10 +527,22 @@
       dw.hidden = false;
       dw.style.left = last.dot.X + 'px';
       dw.style.top = last.dot.Y + 'px';
-      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level + (sel.slot && cellsOf(z)[Math.min(sel.level, cellsOf(z).length) - 1] >= sel.slot ? ' · Section ' + sel.slot : '') : (sel.item && String(spot(sel.item).shelf).trim() === '0' ? ' · On top' : ''));
+      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level + (sel.slot && cellsOf(z)[Math.min(sel.level, cellsOf(z).length) - 1] >= sel.slot ? ' · Section ' + sel.slot : '') : (sel.item && String(spot(sel.item, cur, sel.pi).shelf).trim() === '0' ? ' · On top' : ''));
     } else dw.hidden = true;
   }
 
+  function overlapIdMap() {
+    var o = {}; if (!map) return o;
+    overlapPairs(map.zones).forEach(function (p) { o[p[0].id] = 1; o[p[1].id] = 1; });
+    return o;
+  }
+  function showOverlapMsg() {
+    var el = $('#mapOverlapMsg'); if (!el) return;
+    var ps = map && edit ? overlapPairs(map.zones) : [];
+    if (!ps.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = ps.length + ' box' + (ps.length === 1 ? ' sits' : 'es sit') + ' on top of another (shown in red): ' + ps.slice(0, 4).map(function (p) { return p[0].name + ' and ' + p[1].name; }).join(', ') + (ps.length > 4 ? '...' : '') + '. Press and hold a red box, then drag it apart.';
+  }
   function unproject(x, y) {
     var a = last.proj(0, 0, 0), b = last.proj(1, 1, 0);
     return { u: (x - a.X) / (b.X - a.X), v: (y - a.Y) / (b.Y - a.Y) };
@@ -542,6 +579,7 @@
       $('#mapEditBtn').textContent = edit ? 'Done' : 'Edit sections';
       $('#mapEditHelp').hidden = !edit;
       $('#mapTilt').disabled = edit;
+      showOverlapMsg();
       $('#segTop').setAttribute('aria-pressed', String(map.topFirst !== false));
       $('#segBottom').setAttribute('aria-pressed', String(map.topFirst === false));
       $('#segClean').setAttribute('aria-pressed', String(map.look !== 'photo'));
@@ -562,7 +600,7 @@
     if (!sel || !sel.item) { c.hidden = true; return; }
     var it = sel.item, z = map && map.zones.filter(function (q) { return q.id === sel.zoneId; })[0];
     var name = it.brand + (it.flavor ? ' ' + it.flavor : '');
-    var sp = spot(it);
+    var sp = spot(it, cur, sel.pi);
     var where = sp.section ? sp.section + (sp.shelf ? (String(sp.shelf).trim() === '0' ? ', on top' : ', shelf ' + sp.shelf) : '') : (cur === 'main' ? 'No spot saved yet' : 'No spot saved on ' + mapName());
     c.hidden = false;
     c.innerHTML = '<strong>' + esc(name) + '</strong><span>' + esc(where) + '</span>' +
@@ -577,10 +615,10 @@
     loadImage(function () { refresh(); if (then) then(); });
   }
   var held = null;
-  function selectItem(it) {
+  function selectItem(it, pi) {
     held = it;
-    var sp = spot(it), z = map ? findZone(map.zones, sp.section) : null;
-    sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), slot: slotNumber(sp.shelf), item: it };
+    var sp = spot(it, cur, pi), z = map ? findZone(map.zones, sp.section) : null;
+    sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), slot: slotNumber(sp.shelf), item: it, pi: pi };
     if (edit) { edit = false; restoreView(); }
     zoom = 1; panX = 0; panY = 0;
     focusDot = !!z;
@@ -860,7 +898,7 @@
     } else if (!d.moved) {
       if (d.mode === 'move') openZone(d.zone);
     } else {
-      persist();
+      persist(); showOverlapMsg();
     }
     schedule();
   }
@@ -1039,9 +1077,9 @@
       return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false, kind: z.kind || 'tall', cells: z.cells ? cellsOf(z) : null } : null;
     },
     onShow: function () { refresh(); },
-    show: function (it, id) {
+    show: function (it, id, pi) {
       if (root.ShelfApp) root.ShelfApp.showTab('map');
-      switchTo(id || 'main', function () { if (map && imgEl) selectItem(it); });
+      switchTo(id || 'main', function () { if (map && imgEl) selectItem(it, pi); });
     }
   };
   init();

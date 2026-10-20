@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=63">
+<link rel="stylesheet" href="style.css?v=64">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -42,6 +42,7 @@
   <section class="tabpane" id="tab-browse">
     <h1>Browse</h1>
     <button class="btn" id="stockBtn" type="button">Stock a shelf by scanning</button>
+    <button class="btn ghost" id="checkBtn" type="button">Check a shelf by scanning</button>
     <div id="browseHost"></div>
   </section>
 
@@ -77,6 +78,7 @@
         <h2>Trace your sections</h2>
         <p>Swipe to scroll the page. To draw a box over an aisle or section, press and hold on the photo until it buzzes, then drag. Tap a box to rename it. Press and hold a box, then drag, to move it, or hold its corner square and drag to resize it. Tidy up then straightens everything into a neat layout.</p>
         <p id="mapUnplaced"></p>
+        <p class="hint errtxt" id="mapOverlapMsg" hidden></p>
         <button class="btn block" id="mapTidyBtn" type="button">Tidy up</button>
         <h2 style="margin-top:18px">Change many boxes at once</h2>
         <p>Type the box names or ranges, pick a type, and tap Apply. For example <b>1-17, FD</b> or <b>C10-C17</b>.</p>
@@ -89,6 +91,7 @@
         <div class="setrow"><span>Look</span><div class="seg"><button id="segClean" type="button" aria-pressed="true">Clean</button><button id="segPhoto" type="button" aria-pressed="false">My drawing</button></div></div>
         <div class="setrow"><span>Shelf 1 is the</span><div class="seg"><button id="segTop" type="button" aria-pressed="true">Top</button><button id="segBottom" type="button" aria-pressed="false">Bottom</button></div></div>
         <div class="mapactions">
+          <button class="btn ghost" id="labelsBtn" type="button">Print shelf labels (QR)</button>
           <button class="btn ghost" id="mapReplaceBtn" type="button">Replace plan (photo or PDF)</button>
           <button class="btn ghost danger" id="mapRemoveBtn" type="button">Remove map</button>
         </div>
@@ -206,13 +209,18 @@
 
 <div class="scrim" id="stockScrim" hidden>
   <form class="sheet" id="stockForm" autocomplete="off">
-    <h2>Stock a shelf</h2>
-    <p class="hint">Pick the spot, then scan each bottle on it. Every bottle you scan is moved to that spot. Tap Done when the shelf is finished.</p>
+    <h2 id="stockTitle">Stock a shelf</h2>
+    <p class="hint" id="stockHint"></p>
+    <p class="hint" id="stProgress"></p>
     <div class="field full" id="stMapField" hidden><label for="stMap">Map</label><select id="stMap"></select></div>
     <div class="field full"><label for="stSection">Aisle or section</label><input id="stSection" list="dl-sections" placeholder="Aisle 3" autocapitalize="characters"></div>
     <div class="field full"><label for="stShelf">Shelf (0 = on top, blank = none, 3-2 = shelf 3 section 2)</label><input id="stShelf" placeholder="2"></div>
+    <div class="field full" id="stOptions">
+      <label class="chk"><input type="checkbox" id="stAdd"> <span>Add as another place (keep bottles where they already are)</span></label>
+      <label class="chk"><input type="checkbox" id="stKeep"> <span>Leave bottles that already have a spot alone</span></label>
+    </div>
     <div class="sheet-actions">
-      <button class="btn grow" type="submit">Start scanning</button>
+      <button class="btn grow" id="stockGo" type="submit">Start scanning</button>
       <button class="btn ghost" id="stockClose" type="button">Close</button>
     </div>
   </form>
@@ -277,11 +285,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=63"></script>
-<script src="app.js?v=63"></script>
-<script src="photo.js?v=63"></script>
-<script src="scan.js?v=63"></script>
-<script src="map.js?v=63"></script>
-<script src="backup.js?v=63"></script>
+<script src="search.js?v=64"></script>
+<script src="app.js?v=64"></script>
+<script src="photo.js?v=64"></script>
+<script src="scan.js?v=64"></script>
+<script src="map.js?v=64"></script>
+<script src="backup.js?v=64"></script>
 </body>
 </html>

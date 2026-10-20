@@ -29,7 +29,7 @@
     var it = {
       id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size), price: norm(o.price), qty: norm(o.qty), code: norm(o.code),
       section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0,
-      places: (Array.isArray(o.places) ? o.places : []).map(function (p) { return { m: norm(p && p.m), section: norm(p && p.section), shelf: norm(p && p.shelf) }; }).filter(function (p) { return p.m && (p.section || p.shelf); })
+      places: (Array.isArray(o.places) ? o.places : []).map(function (p) { var q = norm(p && p.q), r = { m: norm(p && p.m), section: norm(p && p.section), shelf: norm(p && p.shelf) }; if (q) r.q = q; return r; }).filter(function (p) { return p.m && (p.section || p.shelf); })
     };
     return window.ShelfSearch.prepare(it);
   }
@@ -84,7 +84,7 @@
     limit = 60;
   }
   function hl(text) { return window.ShelfSearch.highlight(text, tokens, esc); }
-  var noSpot = false, stockF = '';
+  var noSpot = false, stockF = '', spotF = null;
   var LOWKEY = 'shelf-finder-low-v1';
   function lowAt() { try { var v = parseInt(localStorage.getItem(LOWKEY), 10); return v >= 0 ? v : 2; } catch (e) { return 2; } }
   function qtyNum(it) { return /^-?\d+$/.test(String(it.qty || '').trim()) ? parseInt(it.qty, 10) : null; }
@@ -98,6 +98,7 @@
     var pool = items.filter(function (it) {
       if (typeF && it.type.toLowerCase() !== typeF) return false;
       if (noSpot && (it.section || it.shelf || it.places.length)) return false;
+      if (spotF && !atSpotLoose(it, spotF)) return false;
       if (stockF === 'low' && !(stockState(it) === 'out' || stockState(it) === 'low')) return false;
       if (stockF === 'restock' && !needsRestock(it)) return false;
       if (stockF === 'cold' && !isCold(it)) return false;
@@ -132,6 +133,7 @@
     if (stockF === 'restock' && !items.some(needsRestock)) stockF = '';
     if (stockF === 'cold' && !items.some(isCold)) stockF = '';
     var h = '';
+    if (spotF) h += '<button class="chip" type="button" data-spot="clear" aria-pressed="true">' + esc(spotF.section + (spotF.shelf !== '' ? ' · shelf ' + shelfLab(spotF.shelf) : '')) + ' ✕</button>';
     if (keys.length) {
       var ns = items.filter(function (i) { return !i.section && !i.shelf && !i.places.length; }).length;
       h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF && !noSpot && !stockF) + '">All <span>' + items.length + '</span></button>';
@@ -173,19 +175,34 @@
     for (var i = 0; i < ms.length; i++) if (ms[i].id === id) return ms[i].name;
     return '';
   }
-  function renderPlaces(it) {
-    var host = $('#placesHost'), ms = (window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : []).filter(function (m) { return m.id !== 'main'; });
-    if (!ms.length) { host.innerHTML = ''; host.hidden = true; return; }
-    host.hidden = false;
-    host.innerHTML = '<span class="hint">Also kept on other maps (leave blank if not there)</span>' + ms.map(function (m) {
-      var p = ((it && it.places) || []).filter(function (x) { return x.m === m.id; })[0] || {};
-      var names = window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(m.id) : [];
-      return '<div class="placerow" data-pm="' + esc(m.id) + '"><b>' + esc(m.name) + '</b>' +
-        '<input data-ps list="dl-pm-' + esc(m.id) + '" placeholder="Section" value="' + esc(p.section || '') + '" autocapitalize="characters">' +
-        '<datalist id="dl-pm-' + esc(m.id) + '">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
-        '<input data-pf placeholder="Shelf (0 = on top)" value="' + esc(p.shelf || '') + '"></div>';
-    }).join('');
+  /* Extra places: a bottle can also sit on any map (including the main one) in as many spots as needed, each with an optional count. */
+  function placeRowHtml(p) {
+    var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    var pm = p.m || (ms.filter(function (m) { return m.id !== 'main'; })[0] || { id: 'main' }).id;
+    var names = window.ShelfMap && window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(pm) : [];
+    return '<div class="placerow">' +
+      '<select data-pmap aria-label="Map">' + ms.map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === pm ? ' selected' : '') + '>' + esc(m.name) + '</option>'; }).join('') + '</select>' +
+      '<button class="tbtn" type="button" data-prm aria-label="Remove this place">Remove</button>' +
+      '<input data-ps list="dl-pm-' + esc(pm) + '" placeholder="Section" value="' + esc(p.section || '') + '" autocapitalize="characters">' +
+      '<datalist id="dl-pm-' + esc(pm) + '">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+      '<input data-pf placeholder="Shelf (0 = on top, 3-2 = shelf 3 section 2)" value="' + esc(p.shelf || '') + '">' +
+      '<input data-pq inputmode="numeric" placeholder="How many here (optional)" value="' + esc(p.q || '') + '"></div>';
   }
+  function renderPlaces(it) {
+    var host = $('#placesHost'), pl = (it && it.places) || [];
+    host.hidden = false;
+    host.innerHTML = '<span class="hint">Also kept in other places (another map, a back stack, a display). Add as many as you need.</span><div id="placeRows">' + pl.map(placeRowHtml).join('') + '</div><button class="btn ghost" type="button" id="placeAdd">Add another place</button>';
+  }
+  $('#placesHost').addEventListener('click', function (e) {
+    if (e.target.closest('#placeAdd')) { $('#placeRows').insertAdjacentHTML('beforeend', placeRowHtml({})); return; }
+    var rm = e.target.closest('[data-prm]'); if (rm) rm.closest('.placerow').remove();
+  });
+  $('#placesHost').addEventListener('change', function (e) {
+    var sl = e.target.closest('[data-pmap]'); if (!sl) return;
+    var row = sl.closest('.placerow'), id = sl.value, names = window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(id) : [];
+    var dl = row.querySelector('datalist'); dl.id = 'dl-pm-' + id; row.querySelector('[data-ps]').setAttribute('list', dl.id);
+    dl.innerHTML = names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('');
+  });
   function renderList() {
     var list = $('#list'), empty = $('#emptyHost'), more = $('#moreBtn');
     var res = filtered();
@@ -207,10 +224,10 @@
     var shown = res.slice(0, limit);
     list.innerHTML = shown.map(function (it) {
       var meta = [it.type, it.size].filter(Boolean).join(' · ');
-      var xp = (it.places || []).map(function (p) {
+      var xp = (it.places || []).map(function (p, pi) {
         var nm = mapLabel(p.m);
         if (!nm) return '';
-        return '<button class="pill" type="button" data-pm="' + esc(p.m) + '">' + esc(nm) + ' · ' + hl(p.section || '') + (p.shelf ? (p.section ? ' · ' : '') + (p.shelf === '0' ? 'on top' : 'shelf ' + hl(shelfLab(p.shelf))) : '') + '</button>';
+        return '<button class="pill" type="button" data-pm="' + esc(p.m) + '" data-pi="' + pi + '">' + esc(nm) + ' · ' + hl(p.section || '') + (p.shelf ? (p.section ? ' · ' : '') + (p.shelf === '0' ? 'on top' : 'shelf ' + hl(shelfLab(p.shelf))) : '') + (p.q ? ' · ' + esc(p.q) + ' here' : '') + '</button>';
       }).join('');
       var loc = it.section || it.shelf
         ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.shelf === '0' && it.section ? 'On top' : (it.section ? 'Shelf ' : '') + hl(shelfLab(it.shelf))) + '</span>' : '') + '</div>'
@@ -340,7 +357,7 @@
       id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value, price: F.price.value, qty: F.qty.value, code: F.code.value,
       section: F.section.value, shelf: F.shelf.value, notes: F.notes.value,
       places: Array.prototype.map.call(document.querySelectorAll('#placesHost .placerow'), function (r) {
-        return { m: r.getAttribute('data-pm'), section: r.querySelector('[data-ps]').value, shelf: r.querySelector('[data-pf]').value };
+        return { m: r.querySelector('[data-pmap]').value, section: r.querySelector('[data-ps]').value, shelf: r.querySelector('[data-pf]').value, q: r.querySelector('[data-pq]').value };
       })
     });
     /* Places on maps that still exist but are not shown (none) are kept from the saved bottle. */
@@ -501,11 +518,12 @@
   /* Events */
   $('#search').addEventListener('input', function (e) { setQuery(e.target.value); renderList(); });
   $('#chips').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-type],[data-nospot],[data-stock]');
+    var b = e.target.closest('[data-type],[data-nospot],[data-stock],[data-spot]');
     if (!b) return;
-    if (b.hasAttribute('data-stock')) { var sv = b.getAttribute('data-stock'); stockF = stockF === sv ? '' : sv; typeF = ''; noSpot = false; }
-    else if (b.hasAttribute('data-nospot')) { noSpot = !noSpot; typeF = ''; stockF = ''; }
-    else { typeF = b.getAttribute('data-type'); noSpot = false; stockF = ''; }
+    if (b.hasAttribute('data-spot')) { spotF = null; }
+    else if (b.hasAttribute('data-stock')) { var sv = b.getAttribute('data-stock'); stockF = stockF === sv ? '' : sv; typeF = ''; noSpot = false; spotF = null; }
+    else if (b.hasAttribute('data-nospot')) { noSpot = !noSpot; typeF = ''; stockF = ''; spotF = null; }
+    else { typeF = b.getAttribute('data-type'); noSpot = false; stockF = ''; spotF = null; }
     limit = 60;
     renderChips();
     renderList();
@@ -545,7 +563,7 @@
     if (!it) return;
     if (!b) {
       var pl = e.target.closest('[data-pm]');
-      if (pl && window.ShelfMap) { window.ShelfMap.show(it, pl.getAttribute('data-pm')); return; }
+      if (pl && window.ShelfMap) { window.ShelfMap.show(it, pl.getAttribute('data-pm'), parseInt(pl.getAttribute('data-pi'), 10)); return; }
       var lb = e.target.closest('.loc');
       if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has('main')) window.ShelfMap.show(it, 'main');
       return;
@@ -605,6 +623,8 @@
   var scanCode = '';
   function setSearch(v) { var el = $('#search'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
   function afterScan(code) {
+    var lab = parseLabel(code);
+    if (lab) { labelPopup(lab); return; }
     var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
     if (hit.length) { setSearch(code); toast(hit.length === 1 ? 'Found ' + hit[0].brand + (hit[0].flavor ? ' ' + hit[0].flavor : '') : hit.length + ' bottles with that code'); return; }
     scanCode = code;
@@ -664,39 +684,141 @@
     document.body.appendChild(ov);
     wire(ov, function () { ov.remove(); });
   }
-  var stockCtx = null;
+  /* Spots a bottle has: its own Aisle and Shelf on the main map, plus every extra place. */
+  function sameSpot(sec1, sh1, sec2, sh2) { return String(sec1 || '').trim().toLowerCase() === String(sec2 || '').trim().toLowerCase() && String(sh1 || '').trim() === String(sh2 || '').trim(); }
+  function itemSpots(it) {
+    var out = [];
+    if (it.section || it.shelf) out.push({ m: 'main', section: it.section, shelf: it.shelf, primary: true });
+    (it.places || []).forEach(function (p, k) { out.push({ m: p.m, section: p.section, shelf: p.shelf, idx: k }); });
+    return out;
+  }
+  function hasSpot(it) { return itemSpots(it).length > 0; }
+  function itemHere(it, c) { return itemSpots(it).some(function (s) { return s.m === (c.m || 'main') && sameSpot(s.section, s.shelf, c.section, c.shelf); }); }
+  function spotText(s) { return (s.section || '') + (s.shelf !== '' && s.shelf != null ? (s.section ? ' · ' : '') + (String(s.shelf) === '0' ? 'on top' : 'shelf ' + shelfLab(s.shelf)) : ''); }
+  function copyRaw(it) { var r = rawOf(it); if (r.places) r.places = r.places.map(function (p) { return Object.assign({}, p); }); return r; }
+  /* Put a bottle at a spot: by default it is moved there; with c.add it is kept where it is and gets one more place. */
   function placeAt(it, c) {
-    var raw = rawOf(it);
-    if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; }
+    var raw = copyRaw(it), main = !c.m || c.m === 'main';
+    if (c.add) {
+      raw.places = raw.places || [];
+      if (!(main && !raw.section && !raw.shelf)) { raw.places.push({ m: c.m || 'main', section: c.section, shelf: c.shelf }); return mk(raw); }
+      raw.section = c.section; raw.shelf = c.shelf; return mk(raw);
+    }
+    if (main) { raw.section = c.section; raw.shelf = c.shelf; }
     else {
-      raw.places = (raw.places || []).filter(function (p) { return p.m !== c.m; });
-      raw.places.push({ m: c.m, section: c.section, shelf: c.shelf });
+      raw.places = raw.places || [];
+      var at = -1; raw.places.forEach(function (p, k) { if (at < 0 && p.m === c.m) at = k; });
+      if (at >= 0) raw.places[at] = { m: c.m, section: c.section, shelf: c.shelf }; else raw.places.push({ m: c.m, section: c.section, shelf: c.shelf });
     }
     return mk(raw);
   }
-  function whereAt(it, c) {
-    if (!c.m || c.m === 'main') return { section: it.section || '', shelf: it.shelf || '' };
-    var p = (it.places || []).filter(function (x) { return x.m === c.m; })[0];
-    return p ? { section: p.section || '', shelf: p.shelf || '' } : { section: '', shelf: '' };
+  function takeOff(it, c) {
+    var raw = copyRaw(it), main = !c.m || c.m === 'main';
+    if (main && sameSpot(raw.section, raw.shelf, c.section, c.shelf)) { raw.section = ''; raw.shelf = ''; return mk(raw); }
+    var at = -1; (raw.places || []).forEach(function (p, k) { if (at < 0 && p.m === (c.m || 'main') && sameSpot(p.section, p.shelf, c.section, c.shelf)) at = k; });
+    if (at >= 0) raw.places.splice(at, 1);
+    return mk(raw);
   }
-  function openStock() {
+  function placedStats() { var n = items.filter(hasSpot).length; return { placed: n, total: items.length }; }
+  function progressText() { var s = placedStats(); return 'Placed ' + s.placed + ' of ' + s.total + (s.total ? ' (' + Math.floor(100 * s.placed / s.total) + '%)' : ''); }
+  /* Shelf labels: a QR code that holds one spot. Scanning it picks that spot. */
+  function labelText(m, section, shelf) { return 'SF1|' + m + '|' + section + '|' + shelf; }
+  function parseLabel(code) {
+    var p = String(code || '').split('|');
+    if (p[0] !== 'SF1' || p.length < 4) return null;
     var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    return { m: p[1] || 'main', section: p[2] || '', shelf: p.slice(3).join('|'), mapName: ms.length > 1 ? mapLabel(p[1] || 'main') : '' };
+  }
+  /* Whether a bottle sits at a spot, matching the shelf level (3 also matches 3-2) unless the spot names a section on the shelf. */
+  function shelfLevelOf(v) { var m = String(v == null ? '' : v).match(/\d+/); return m ? parseInt(m[0], 10) : -1; }
+  function atSpotLoose(it, c) {
+    return itemSpots(it).some(function (s) {
+      if (s.m !== (c.m || 'main') || String(s.section || '').trim().toLowerCase() !== String(c.section || '').trim().toLowerCase()) return false;
+      if (c.shelf === '' || c.shelf == null) return true;
+      var cp = shelfParts(c.shelf), sp = shelfParts(s.shelf);
+      if (shelfLevelOf(s.shelf) !== shelfLevelOf(c.shelf)) return false;
+      return cp ? !!sp && sp.slot === cp.slot : true;
+    });
+  }
+  function labelPopup(lab) {
+    var where = (lab.mapName ? lab.mapName + ' · ' : '') + lab.section + (lab.shelf !== '' ? ' · shelf ' + shelfLab(lab.shelf) : '');
+    var n = items.filter(function (it) { return atSpotLoose(it, lab); }).length;
+    popup('<h3>' + esc(where) + '</h3><p>' + n + ' bottle' + (n === 1 ? '' : 's') + ' listed here.</p><div class="popbtns"><button class="btn grow" data-lshow type="button">Show bottles</button></div><div class="popbtns"><button class="btn grow" data-lstock type="button">Stock this shelf</button><button class="btn grow" data-lcheck type="button">Check this shelf</button></div><div class="popbtns"><button class="btn ghost grow" data-lclose type="button">Cancel</button></div>', function (ov, close) {
+      ov.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t) return;
+        if (t.hasAttribute('data-lshow')) { close(); spotF = { m: lab.m, section: lab.section, shelf: lab.shelf }; typeF = ''; noSpot = false; stockF = ''; setSearch(''); showTab('find'); renderChips(); renderList(); }
+        else if (t.hasAttribute('data-lstock') || t.hasAttribute('data-lcheck')) {
+          close(); openStock(t.hasAttribute('data-lcheck') ? 'check' : 'stock');
+          if (lab.m && $('#stMap').querySelector('[value="' + lab.m + '"]')) $('#stMap').value = lab.m;
+          $('#stSection').value = lab.section; $('#stShelf').value = lab.shelf;
+        } else close();
+      });
+    });
+  }
+  var stockMode = 'stock';
+  function openStock(mode) {
+    stockMode = mode === 'check' ? 'check' : 'stock';
+    var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    $('#stockTitle').textContent = stockMode === 'check' ? 'Check a shelf' : 'Stock a shelf';
+    $('#stockHint').textContent = stockMode === 'check'
+      ? 'Pick the spot, then scan everything that is on it. When you tap Done you see what is missing, what belongs somewhere else, and what is not in your list.'
+      : 'Pick the spot, then scan each bottle on it. Every bottle you scan is moved to that spot. Tap Done when the shelf is finished. You can also scan a printed shelf label to switch spots.';
+    $('#stOptions').hidden = stockMode === 'check';
+    $('#stProgress').hidden = stockMode === 'check';
+    $('#stProgress').textContent = progressText();
+    $('#stockGo').textContent = stockMode === 'check' ? 'Start checking' : 'Start scanning';
     $('#stMapField').hidden = ms.length < 2;
     $('#stMap').innerHTML = ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
     $('#stockScrim').hidden = false;
     setTimeout(function () { $('#stSection').focus(); }, 40);
   }
   function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + shelfLab(c.shelf) : ''); }
-  $('#stockBtn').addEventListener('click', openStock);
+  $('#stockBtn').addEventListener('click', function () { openStock('stock'); });
+  $('#checkBtn').addEventListener('click', function () { openStock('check'); });
   $('#stockClose').addEventListener('click', function () { $('#stockScrim').hidden = true; });
+
+  function showCheckReport(c, expected, scannedIds, misplaced, unknown) {
+    var missing = expected.filter(function (it) { return !scannedIds[it.id]; });
+    function nm(it) { return it.brand + (it.flavor ? ' ' + it.flavor : ''); }
+    function rows(list, btn, label) {
+      return list.map(function (it) { return '<div class="logrow2"><span>' + esc(nm(it)) + (btn === 'move' ? '<small> now listed at ' + esc(itemSpots(it).map(spotText).join(', ') || 'no spot') + '</small>' : '') + '</span><button class="tbtn" type="button" data-' + btn + '="' + esc(it.id) + '">' + label + '</button></div>'; }).join('');
+    }
+    var found = expected.length - missing.length;
+    var html = '<h3>' + esc(stockSpotLabel(c)) + '</h3><p><b>' + found + '</b> of ' + expected.length + ' listed bottles scanned.</p>' +
+      (missing.length ? '<h4>Not scanned (' + missing.length + ')</h4><p class="hint">Listed here but not seen. They may be sold out or moved.</p>' + rows(missing, 'off', 'Take off') + '<button class="btn ghost" type="button" data-offall>Take all off this shelf</button>' : '') +
+      (misplaced.length ? '<h4>Here but listed elsewhere (' + misplaced.length + ')</h4>' + rows(misplaced, 'move', 'Move here') + '<button class="btn ghost" type="button" data-moveall>Move all here</button>' : '') +
+      (unknown.length ? '<h4>Not in your list (' + unknown.length + ')</h4><p class="hint">' + unknown.map(esc).join(', ') + '</p>' : '') +
+      (!missing.length && !misplaced.length && !unknown.length ? '<p>Everything matches.</p>' : '') +
+      '<div class="popbtns"><button class="btn grow" type="button" data-rclose>Close</button></div>';
+    popup(html, function (ov, close) {
+      ov.querySelector('.popcard').classList.add('wide');
+      function applyOne(id, fn) { var it = items.filter(function (x) { return x.id === id; })[0]; if (it) try { save(fn(it)); } catch (err) { toast('Could not save. This phone is out of space.'); } }
+      ov.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t) return;
+        if (t.hasAttribute('data-rclose')) { close(); return; }
+        if (t.hasAttribute('data-off')) { applyOne(t.getAttribute('data-off'), function (it) { return takeOff(it, c); }); t.closest('.logrow2').remove(); return; }
+        if (t.hasAttribute('data-move')) { applyOne(t.getAttribute('data-move'), function (it) { return placeAt(it, c); }); t.closest('.logrow2').remove(); return; }
+        if (t.hasAttribute('data-offall')) { missing.forEach(function (it) { applyOne(it.id, function (x) { return takeOff(x, c); }); }); close(); toast(missing.length + ' taken off ' + stockSpotLabel(c)); return; }
+        if (t.hasAttribute('data-moveall')) { misplaced.forEach(function (it) { applyOne(it.id, function (x) { return placeAt(x, c); }); }); close(); toast(misplaced.length + ' moved to ' + stockSpotLabel(c)); }
+      });
+    });
+  }
+
   $('#stockForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var section = norm($('#stSection').value), shelf = norm($('#stShelf').value);
     if (!section) { toast('Type the aisle or section first.'); return; }
     var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main');
-    var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m) };
+    var check = stockMode === 'check';
+    var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m), add: !check && $('#stAdd').checked };
+    var keepPlaced = !check && $('#stKeep').checked;
     if (!window.ShelfScan) return;
-    var unknown = [], placed = 0, skipped = {};
+    var unknown = [], placed = 0, skipped = {}, scannedIds = {}, misplaced = [], expected = [];
+    function expectedNow() { return items.filter(function (it) { return itemHere(it, c); }); }
+    if (check) expected = expectedNow();
+    function headHtml() {
+      return '<b>' + esc(stockSpotLabel(c)) + '</b><span>' + (check ? 'Checking: ' + Object.keys(scannedIds).length + ' scanned of ' + expected.length + ' listed' : progressText() + ' · scan each bottle') + '</span>';
+    }
     function stockUnknown(code, k) {
       window.ShelfScan.hold(true);
       function resume() { window.ShelfScan.hold(false); }
@@ -706,8 +828,8 @@
         if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; } else raw.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
         var it = mk(raw);
         try { save(it); } catch (err) { toast('Could not save. This phone is out of space.'); close(); resume(); return; }
-        placed++; close(); resume();
-        window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; } catch (err) {} } });
+        placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
+        window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
       }
       popup('<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not in your list. Add it as a new bottle?</p><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>', function (ov, close) {
         ov.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
@@ -725,24 +847,91 @@
     }
     $('#stockScrim').hidden = true;
     window.ShelfScan.open(function (code) {
+      /* A printed shelf label switches the spot. */
+      var lab = parseLabel(code);
+      if (lab) {
+        c.m = lab.m; c.section = lab.section; c.shelf = lab.shelf; c.mapName = lab.mapName;
+        if (check) { scannedIds = {}; misplaced = []; unknown = []; expected = expectedNow(); }
+        window.ShelfScan.setHead(headHtml());
+        return { text: 'Now on ' + stockSpotLabel(c) };
+      }
       var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
-      if (!hit.length) { if (skipped[k]) return null; stockUnknown(code, k); return null; }
-      var it = hit[0], name = it.brand + (it.flavor ? ' ' + it.flavor : ''), w = whereAt(it, c);
-      if (w.section.toLowerCase() === c.section.toLowerCase() && String(w.shelf) === String(c.shelf)) return { text: name + ' is already here' };
-      var before = it, upd = placeAt(it, c);
+      if (!hit.length) {
+        if (skipped[k]) return null;
+        if (check) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad' }; }
+        stockUnknown(code, k); return null;
+      }
+      var it = hit[0], name = it.brand + (it.flavor ? ' ' + it.flavor : '');
+      if (check) {
+        if (scannedIds[it.id]) return null;
+        scannedIds[it.id] = 1;
+        var here = itemHere(it, c);
+        if (!here && misplaced.indexOf(it) < 0) misplaced.push(it);
+        window.ShelfScan.setHead(headHtml());
+        return here ? { text: name + ' is here', cls: 'ok' } : { text: name + ' is listed at ' + (itemSpots(it).map(spotText).join(', ') || 'no spot'), cls: 'bad' };
+      }
+      if (itemHere(it, c)) return { text: name + ' is already here' };
+      if (keepPlaced && hasSpot(it)) return { text: name + ' already has a spot (' + itemSpots(it).map(spotText).join(', ') + '), left as is' };
+      var snap = copyRaw(it), upd = placeAt(it, c);
       try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return { text: 'Could not save ' + name, cls: 'bad' }; }
-      placed++;
-      return { text: name + ' added', cls: 'ok', undo: function () { try { save(placeAt(before, { m: c.m, section: w.section, shelf: w.shelf })); placed--; } catch (err) {} } };
+      placed++; window.ShelfScan.setHead(headHtml());
+      return { text: name + (c.add ? ' added as another place' : ' added'), cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } };
     }, {
-      continuous: true, doneText: 'Done',
-      head: '<b>' + esc(stockSpotLabel(c)) + '</b><span>Scan each bottle on this shelf</span>',
+      continuous: true, doneText: 'Done', head: headHtml(),
       onDone: function () {
+        if (check) { showCheckReport(c, expected, scannedIds, misplaced, unknown); return; }
         toast(placed + ' bottle' + (placed === 1 ? '' : 's') + ' put on ' + stockSpotLabel(c) + (unknown.length ? '. ' + unknown.length + ' not in your list: ' + unknown.slice(0, 3).join(', ') + (unknown.length > 3 ? '...' : '') : ''));
         $('#stShelf').value = '';
-        openStock();
+        openStock('stock');
       }
     });
   });
+  /* Shelf labels: one QR per shelf, to print and stick on the shelf. Scanning it picks that spot. */
+  var qrPromise = null;
+  function loadQR() {
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    if (!qrPromise) qrPromise = new Promise(function (res, rej) {
+      var s = document.createElement('script'); s.src = 'vendor/qr/qrcode.js';
+      s.onload = function () { res(window.qrcode); }; s.onerror = function () { qrPromise = null; rej(new Error('qr')); };
+      document.head.appendChild(s);
+    });
+    return qrPromise;
+  }
+  function qrSvg(text) { var q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ scalable: true, margin: 0 }); }
+  function labelList(mapId) {
+    var m = window.ShelfMap.mapOf(mapId), out = [];
+    ((m && m.zones) || []).forEach(function (z) {
+      var shelfy = z.kind !== 'flat' && z.kind !== 'low', n = shelfy ? (z.shelves || 5) : 0, k;
+      if (!shelfy) out.push({ section: z.name, shelf: '' });
+      else for (k = 1; k <= n; k++) out.push({ section: z.name, shelf: String(k) });
+    });
+    out.sort(function (a, b) { return cmp(a.section, b.section) || cmp(a.shelf, b.shelf); });
+    return out;
+  }
+  function openLabels() {
+    if (!window.ShelfMap) return;
+    var ms = window.ShelfMap.maps(), ov = document.createElement('div'); ov.className = 'printov';
+    function body(id) {
+      var list = labelList(id);
+      if (!list.length) return '<p class="hint">This map has no sections yet. Draw some in Edit sections first.</p>';
+      return '<div class="labgrid">' + list.map(function (l) {
+        return '<div class="lab">' + qrSvg(labelText(id, l.section, l.shelf)) + '<b>' + esc(l.section) + '</b><span>' + (l.shelf === '' ? '&nbsp;' : 'Shelf ' + esc(l.shelf)) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    ov.innerHTML = '<div class="noprint pbar"><button class="btn" type="button" data-pgo>Print</button><button class="btn ghost" type="button" data-pclose>Close</button></div>' +
+      (ms.length > 1 ? '<div class="noprint"><label class="hint" for="labMap">Map</label> <select id="labMap">' + ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('') + '</select></div>' : '') +
+      '<h2>Shelf labels</h2><p class="hint noprint">Print, cut and stick one on each shelf. Scan it in Stock a shelf, Check a shelf, or the Find scanner to jump to that shelf.</p><div id="labBody"><p class="hint">Making labels...</p></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) {
+      if (e.target.closest('[data-pclose]')) ov.remove();
+      else if (e.target.closest('[data-pgo]')) { try { window.print(); } catch (err) {} }
+    });
+    var cur = 'main';
+    function draw() { $('#labBody').innerHTML = body(cur); }
+    loadQR().then(draw, function () { $('#labBody').innerHTML = '<p class="hint">Could not load the label maker. Check the connection and try again.</p>'; });
+    var sel = ov.querySelector('#labMap'); if (sel) sel.addEventListener('change', function () { cur = sel.value; draw(); });
+  }
+  $('#labelsBtn').addEventListener('click', openLabels);
   $('#importBtn').addEventListener('click', openImport);
   $('#importUpdateOnly').addEventListener('change', fillMapper);
   $('#importText').addEventListener('input', function () { if ($('#importUpdateOnly').checked) fillMapper(); });
@@ -805,7 +994,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v63';
+  var APP_VERSION = 'v64';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

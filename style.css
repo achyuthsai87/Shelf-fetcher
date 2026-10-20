@@ -534,3 +534,15 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .cellrow { display: grid; grid-template-columns: 1fr auto 34px auto; align-items: center; gap: 8px; }
 .cellrow b { text-align: center; }
 .cellrow .tbtn { min-width: 40px; min-height: 36px; font-size: 18px; }
+
+.popcard.wide { max-width: 440px; max-height: 80vh; overflow: auto; }
+.popcard h4 { margin: 6px 0 0; font-size: 15px; font-weight: 800; }
+.logrow2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.logrow2 small { display: block; opacity: .7; }
+
+.labgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.lab { border: 1.5px solid #222; border-radius: 10px; padding: 10px 8px; text-align: center; break-inside: avoid; page-break-inside: avoid; display: grid; gap: 4px; justify-items: center; }
+.lab svg { width: 100%; max-width: 130px; height: auto; }
+.lab b { font-size: 24px; line-height: 1; color: #111; }
+.lab span { font-size: 15px; color: #333; }
+.errtxt { color: #d63b3b; font-weight: 600; }
