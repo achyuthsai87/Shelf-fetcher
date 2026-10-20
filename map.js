@@ -243,8 +243,9 @@
         ctx.lineWidth = sel ? 3 : 1;
         ctx.stroke();
         var tc = P((x0 + x1) / 2, (y0 + y1) / 2, Z);
-        var wpx = Math.max(Math.abs(top[1].X - top[0].X), Math.abs(top[2].X - top[3].X));
-        labels.push({ text: z.name || 'Unnamed', X: tc.X, Y: tc.Y, w: wpx });
+        var bx = top.map(function (p) { return p.X; }), by = top.map(function (p) { return p.Y; });
+        var wpx = Math.max.apply(null, bx) - Math.min.apply(null, bx), hpx = Math.max.apply(null, by) - Math.min.apply(null, by);
+        labels.push({ text: z.name || 'Unnamed', X: tc.X, Y: tc.Y, w: wpx, h: hpx });
         if (sel) {
           var lz = levelZ(z, st.selLevel || 0, st.topFirst);
           var dp = P((x0 + x1) / 2, (y0 + y1) / 2, lz);
@@ -259,8 +260,9 @@
     labels.forEach(function (l) {
       var text = l.text, short = text.length <= 3;
       if (short) {
-        if (l.w < 8) return;
-        ctx.font = '700 ' + Math.max(9, Math.min(13, l.w * 0.85)) + 'px -apple-system, "Segoe UI", Roboto, sans-serif';
+        var room = l.h == null ? l.w : Math.min(l.w, l.h * 1.4);
+        if (room < 9) return;
+        ctx.font = '700 ' + Math.max(9, Math.min(13, room * 0.6)) + 'px -apple-system, "Segoe UI", Roboto, sans-serif';
       } else {
         if (l.w < 44) return;
         ctx.font = '600 12px -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -289,7 +291,7 @@
   }
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
-  var focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
+  var rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -349,7 +351,7 @@
     var tab = $('#tab-map');
     if (!tab || !tab.classList.contains('on') || !map || !imgEl) return;
     var wrap = $('#mapWrap'), cv = $('#mapCanvas');
-    var W = Math.max(200, wrap.clientWidth), H = Math.round(Math.min(Math.max(W * 1.35, 360), Math.max(360, window.innerHeight * 0.74)));
+    var W = Math.max(200, wrap.clientWidth), H = rot && !edit ? Math.round(Math.min(W * 1.55, Math.max(380, window.innerHeight * 0.78))) : Math.round(Math.min(Math.max(W * 0.95, 300), Math.max(300, window.innerHeight * 0.58)));
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
       cv.width = Math.round(W * dpr);
@@ -362,7 +364,7 @@
     var z = sel ? map.zones.filter(function (q) { return q.id === sel.zoneId; })[0] : null;
     last = drawScene(ctx, W, H, {
       img: imgEl, imgW: imgEl.naturalWidth, imgH: imgEl.naturalHeight, aspect: imgEl.naturalWidth / imgEl.naturalHeight,
-      zones: map.zones, yaw: yaw, elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
+      zones: map.zones, yaw: yaw + (rot && !edit ? -Math.PI / 2 : 0), elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
       zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
       dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast
     });
@@ -628,6 +630,10 @@
     cv.addEventListener('pointerup', onUp);
     cv.addEventListener('pointercancel', function (e) { delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
     cv.addEventListener('wheel', function (e) { if (!map || !imgEl) return; e.preventDefault(); var p = pt(e); setZoom(zoom * Math.exp(-e.deltaY * 0.002), p.x, p.y); }, { passive: false });
+    try { var sr = localStorage.getItem('shelf-finder-maprot'); rot = sr === null ? (window.innerHeight > window.innerWidth) : sr === '1'; } catch (e) { rot = window.innerHeight > window.innerWidth; }
+    function syncRot() { var b = $('#mapRotBtn'); b.setAttribute('aria-pressed', String(rot)); b.textContent = rot ? 'Wide view' : 'Tall view'; }
+    syncRot();
+    $('#mapRotBtn').addEventListener('click', function () { rot = !rot; zoom = 1; panX = 0; panY = 0; try { localStorage.setItem('shelf-finder-maprot', rot ? '1' : '0'); } catch (e) {} syncRot(); focusDot = !!(sel && sel.zoneId); schedule(); });
     $('#mapZoomIn').addEventListener('click', function () { setZoom(zoom * 1.6); });
     $('#mapZoomOut').addEventListener('click', function () { setZoom(zoom / 1.6); });
     window.addEventListener('resize', schedule);
