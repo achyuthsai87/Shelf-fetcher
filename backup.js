@@ -5,7 +5,7 @@
    Nothing here ever leaves the phone unless you save the file. */
 (function (root) {
   'use strict';
-  var B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
+  var LB = 'shelf-finder-lastbackup-v1', B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
   var $ = function (s) { return document.querySelector(s); };
   function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function counts(b, m) {
@@ -53,6 +53,36 @@
     location.reload();
   }
 
+  function hash() {
+    var s = (get(B) || '') + '|' + (get(M) || ''), h = 5381, i;
+    for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return String(h);
+  }
+  function lastBackup() { try { return JSON.parse(get(LB) || 'null'); } catch (e) { return null; } }
+  function markBackedUp() {
+    var c = counts(get(B), get(M));
+    try { localStorage.setItem(LB, JSON.stringify({ t: Date.now(), h: hash(), n: c.n, z: c.z })); } catch (e) {}
+    status();
+  }
+  function stale() {
+    var c = counts(get(B), get(M)), lb = lastBackup();
+    if (!c.n) return false;
+    if (!lb) return c.n >= 10;
+    return lb.h !== hash() && Date.now() - lb.t > 2 * 24 * 3600 * 1000;
+  }
+  function status() {
+    var el = $('#backupStatus'), lb = lastBackup(), c = counts(get(B), get(M));
+    if (el) {
+      if (!lb) el.textContent = 'No backup saved yet.';
+      else el.textContent = 'Last backup: ' + when(lb.t) + ' (' + lb.n + ' bottles). ' + (lb.h === hash() ? 'Nothing has changed since.' : 'You have changes since then.');
+    }
+    var nd = $('#backupNudge');
+    if (nd) {
+      var show = stale();
+      nd.hidden = !show;
+      if (show) nd.textContent = lb ? 'Your changes are not backed up yet. Tap to save a backup.' : 'Your list is not backed up yet. Tap to save a backup.';
+    }
+  }
   function saveFile() {
     var b = get(B), m = get(M), c = counts(b, m);
     if (!c.n && !c.z) { toast('Nothing to back up yet.'); return; }
@@ -63,13 +93,14 @@
     try {
       var file = new File([blob], name, { type: 'application/json' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: 'Shelf Finder backup' }).then(function () { toast('Backup shared: ' + c.n + ' bottles, ' + c.z + ' sections'); }, function () {});
+        navigator.share({ files: [file], title: 'Shelf Finder backup' }).then(function () { markBackedUp(); toast('Backup saved: ' + c.n + ' bottles, ' + c.z + ' sections'); }, function () {});
         return;
       }
     } catch (e) {}
     var url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    markBackedUp();
     toast('Backup saved: ' + c.n + ' bottles, ' + c.z + ' sections');
   }
 
@@ -98,6 +129,14 @@
   function init() {
     if (!$('#saveBackupBtn')) return;
     $('#saveBackupBtn').addEventListener('click', saveFile);
+    var nudge = document.createElement('button');
+    nudge.id = 'backupNudge'; nudge.className = 'nudge'; nudge.type = 'button'; nudge.hidden = true;
+    nudge.addEventListener('click', saveFile);
+    var hero = document.querySelector('#tab-find .hero');
+    if (hero && hero.parentNode) hero.parentNode.insertBefore(nudge, hero.nextSibling);
+    status();
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) status(); });
+    setInterval(status, 60000);
     $('#restoreBackupBtn').addEventListener('click', function () { $('#restoreFile').click(); });
     $('#restoreFile').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) restoreFile(f); });
     $('#autoBackups').addEventListener('click', function (e) {

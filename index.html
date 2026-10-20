@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -107,7 +107,8 @@
     </div>
     <div class="glass card">
       <h2>Back up everything</h2>
-      <p>Saves your bottles, the map and every section into one file. Tap Save backup, then pick Google Drive (or Files, Mail) in the share sheet. To get it all back, tap Restore and choose that file from Drive.</p>
+      <p>Saves your bottles, the map and every section into one file. Tap Save backup, then choose Save to Files and pick your Google Drive folder. The phone remembers that folder, so next time it is the same two taps. To get everything back, tap Restore and pick the file.</p>
+      <p id="backupStatus" class="hint"></p>
       <div class="mapactions"><button class="btn" id="saveBackupBtn" type="button">Save backup</button><button class="btn ghost" id="restoreBackupBtn" type="button">Restore</button></div>
       <input id="restoreFile" type="file" accept=".json,application/json" hidden>
     </div>
@@ -215,10 +216,10 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=34"></script>
-<script src="app.js?v=34"></script>
-<script src="photo.js?v=34"></script>
-<script src="map.js?v=34"></script>
-<script src="backup.js?v=34"></script>
+<script src="search.js?v=35"></script>
+<script src="app.js?v=35"></script>
+<script src="photo.js?v=35"></script>
+<script src="map.js?v=35"></script>
+<script src="backup.js?v=35"></script>
 </body>
 </html>
