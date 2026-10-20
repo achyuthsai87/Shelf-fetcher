@@ -831,18 +831,55 @@
         placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
         window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
       }
-      popup('<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not in your list. Add it as a new bottle?</p><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>', function (ov, close) {
-        ov.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
-        ov.querySelector('[data-padd]').addEventListener('click', function () {
-          ov.querySelector('.popcard').innerHTML = '<h3>Looking it up</h3><p>Finding the name for <b>' + esc(code) + '</b>...</p>';
+      popup('', function (ov, close) {
+        var card = ov.querySelector('.popcard');
+        function main() {
+          card.innerHTML = '<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not linked to a bottle yet. Link it to a bottle in your list, or add it as a new bottle.</p><div class="popbtns"><button class="btn grow" data-plink type="button">Link to a bottle</button></div><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+          card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
+          card.querySelector('[data-plink]').addEventListener('click', link);
+          card.querySelector('[data-padd]').addEventListener('click', add);
+        }
+        function add() {
+          card.innerHTML = '<h3>Looking it up</h3><p>Finding the name for <b>' + esc(code) + '</b>...</p>';
           lookupCode(code).then(function (info) {
             if (info) { create(info, close); return; }
-            ov.querySelector('.popcard').innerHTML = '<h3>No details found</h3><p>No product details exist online for <b>' + esc(code) + '</b>. Type the name once and the barcode is remembered.</p><input class="popin" id="popName" placeholder="Bottle name and size" autocomplete="off"><div class="popbtns"><button class="btn grow" data-psave type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
-            var inp = ov.querySelector('#popName'); setTimeout(function () { inp.focus(); }, 40);
-            ov.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
-            ov.querySelector('[data-psave]').addEventListener('click', function () { var n = norm(inp.value); if (!n) { inp.focus(); return; } create({ name: n, size: sizeFrom(n) }, close); });
+            card.innerHTML = '<h3>No details found</h3><p>No product details exist online for <b>' + esc(code) + '</b>. Type the name once and the barcode is remembered.</p><input class="popin" id="popName" placeholder="Bottle name and size" autocomplete="off"><div class="popbtns"><button class="btn grow" data-psave type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+            var inp = card.querySelector('#popName'); setTimeout(function () { inp.focus(); }, 40);
+            card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
+            card.querySelector('[data-psave]').addEventListener('click', function () { var n = norm(inp.value); if (!n) { inp.focus(); return; } create({ name: n, size: sizeFrom(n) }, close); });
           });
-        });
+        }
+        function link() {
+          card.innerHTML = '<h3>Which bottle is it?</h3><input class="popin" id="popQ" type="search" placeholder="Search the name or item number" autocomplete="off" autocapitalize="off" spellcheck="false"><p class="hint" id="popOnline"></p><div id="popRes" class="poplist"></div><div class="popbtns"><button class="btn ghost" data-pback type="button">Back</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+          var q = card.querySelector('#popQ'), res = card.querySelector('#popRes'), on = card.querySelector('#popOnline'), typed = false;
+          function render() {
+            var qv = q.value;
+            if (!window.ShelfSearch.tokens(qv).length) { res.innerHTML = ''; return; }
+            var list = window.ShelfSearch.run(items, qv).slice(0, 6).map(function (r) { return r.it; });
+            res.innerHTML = list.length ? list.map(function (it) {
+              return '<button class="linkrow" type="button" data-pick="' + esc(it.id) + '"><b>' + esc(it.brand) + '</b>' + (it.flavor ? ' ' + esc(it.flavor) : '') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + (it.code ? ' <small>(has a barcode)</small>' : '') + '</button>';
+            }).join('') : '<p class="hint">Nothing matches. Try fewer words.</p>';
+          }
+          q.addEventListener('input', function () { typed = true; render(); });
+          setTimeout(function () { q.focus(); }, 40);
+          on.textContent = 'Looking up the name online to help...';
+          lookupCode(code).then(function (info) {
+            if (!card.contains(on)) return;
+            if (info && !typed) { on.textContent = 'Online name: ' + info.name; q.value = info.name.replace(/['’`]/g, ''); render(); } else on.textContent = info ? 'Online name: ' + info.name : '';
+          });
+          card.querySelector('[data-pback]').addEventListener('click', main);
+          card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
+          res.addEventListener('click', function (e) {
+            var b = e.target.closest('[data-pick]'); if (!b) return;
+            var it = items.filter(function (x) { return x.id === b.getAttribute('data-pick'); })[0]; if (!it) return;
+            var snap = copyRaw(it), raw = copyRaw(it); raw.code = code;
+            var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c);
+            try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
+            placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
+            window.ShelfScan.log({ text: it.brand + (it.flavor ? ' ' + it.flavor : '') + ' linked and added', cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
+          });
+        }
+        main();
       });
     }
     $('#stockScrim').hidden = true;
@@ -994,7 +1031,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v65';
+  var APP_VERSION = 'v66';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

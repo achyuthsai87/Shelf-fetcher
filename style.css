@@ -546,3 +546,6 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .lab b { font-size: 24px; line-height: 1; color: #111; }
 .lab span { font-size: 15px; color: #333; }
 .errtxt { color: #d63b3b; font-weight: 600; }
+
+.poplist { display: grid; gap: 6px; max-height: 38vh; overflow: auto; }
+.popcard .linkrow { text-align: left; width: 100%; }
