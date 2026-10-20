@@ -39,7 +39,7 @@
     ov.className = 'scanov' + (opts.continuous ? ' cont' : ''); ov.id = 'scanOv';
     ov.innerHTML = (opts.head ? '<div class="scanhead">' + opts.head + '</div>' : '') + '<div class="scanbox"><video id="scanVideo" playsinline muted autoplay></video><div class="scanline"></div></div>' +
       '<p class="scanmsg" id="scanMsg">Starting the camera...</p>' +
-      '<div class="scanrow"><input id="scanType" inputmode="numeric" placeholder="Or type the barcode" autocomplete="off"><button class="btn" id="scanTypeGo" type="button">Use</button></div>' +
+      '<div class="scanrow"><input id="scanType" inputmode="none" enterkeyhint="done" placeholder="Tap to type, or scan with a scanner" autocomplete="off"><button class="btn" id="scanTypeGo" type="button">Use</button></div>' +
       (opts.continuous ? '<div class="scanlog" id="scanLog"></div>' : '') +
       '<div class="scanrow"><label class="btn ghost scanpick">Use a photo instead<input id="scanPhoto" type="file" accept="image/*" capture="environment" hidden></label><button class="btn' + (opts.continuous ? '' : ' ghost') + '" id="scanClose" type="button">' + (opts.doneText || 'Close') + '</button></div>';
     document.body.appendChild(ov);
@@ -79,6 +79,10 @@
         o.frequency.value = bad ? 220 : 880; g.gain.value = 0.08; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.1);
       } catch (e) {}
     }
+    /* A hardware scanner types the code and presses Enter, so the field is focused without a keyboard popping up. Tapping it brings the keyboard for typing by hand. */
+    var tin = $('#scanType');
+    tin.addEventListener('pointerdown', function () { if (tin.getAttribute('inputmode') === 'none') { tin.setAttribute('inputmode', 'numeric'); tin.blur(); setTimeout(function () { tin.focus(); }, 30); } });
+    if (opts.continuous) setTimeout(function () { try { if (state && !state.dead) tin.focus({ preventScroll: true }); } catch (e) {} }, 60);
     $('#scanClose').addEventListener('click', function () { var d = opts.onDone; stop(); if (d) d(); });
     $('#scanTypeGo').addEventListener('click', function () { var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; });
     $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; } });
