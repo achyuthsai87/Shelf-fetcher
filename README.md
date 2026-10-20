@@ -2,6 +2,8 @@
 
 Search any liquor brand, flavor or type and see which aisle and shelf it sits on. Works offline once installed, and all data stays on the phone (localStorage).
 
+**Live:** https://achyuthsai87.github.io/Shelf-fetcher/
+
 ## Install on a phone
 - **iPhone (Safari):** Share, then *Add to Home Screen*
 - **Android (Chrome):** the three dots menu, then *Install app*
