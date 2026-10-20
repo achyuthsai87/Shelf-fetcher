@@ -183,7 +183,7 @@
       return '<div class="placerow" data-pm="' + esc(m.id) + '"><b>' + esc(m.name) + '</b>' +
         '<input data-ps list="dl-pm-' + esc(m.id) + '" placeholder="Section" value="' + esc(p.section || '') + '" autocapitalize="characters">' +
         '<datalist id="dl-pm-' + esc(m.id) + '">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
-        '<input data-pf inputmode="numeric" placeholder="Shelf (0 = on top)" value="' + esc(p.shelf || '') + '"></div>';
+        '<input data-pf placeholder="Shelf (0 = on top)" value="' + esc(p.shelf || '') + '"></div>';
     }).join('');
   }
   function renderList() {
@@ -210,10 +210,10 @@
       var xp = (it.places || []).map(function (p) {
         var nm = mapLabel(p.m);
         if (!nm) return '';
-        return '<button class="pill" type="button" data-pm="' + esc(p.m) + '">' + esc(nm) + ' · ' + hl(p.section || '') + (p.shelf ? (p.section ? ' · ' : '') + (p.shelf === '0' ? 'on top' : 'shelf ' + hl(p.shelf)) : '') + '</button>';
+        return '<button class="pill" type="button" data-pm="' + esc(p.m) + '">' + esc(nm) + ' · ' + hl(p.section || '') + (p.shelf ? (p.section ? ' · ' : '') + (p.shelf === '0' ? 'on top' : 'shelf ' + hl(shelfLab(p.shelf))) : '') + '</button>';
       }).join('');
       var loc = it.section || it.shelf
-        ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.shelf === '0' && it.section ? 'On top' : (it.section ? 'Shelf ' : '') + hl(it.shelf)) + '</span>' : '') + '</div>'
+        ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.shelf === '0' && it.section ? 'On top' : (it.section ? 'Shelf ' : '') + hl(shelfLab(it.shelf))) + '</span>' : '') + '</div>'
         : '<div class="loc none"><span class="sec">' + (xp ? 'Not on floor' : 'No spot yet') + '</span></div>';
       return '<li class="glass item" data-id="' + esc(it.id) + '"><div class="row"><div class="info">' +
         '<h3 class="brand">' + hl(it.brand) + '</h3>' +
@@ -317,12 +317,17 @@
     if (!it) setTimeout(function () { F.brand.focus(); }, 30);
     else if (!it.section) setTimeout(function () { F.section.focus(); }, 30);
   }
+  /* A shelf can be written 3-2 (shelf 3, section 2 counted from the left). */
+  function shelfParts(v) { var m = /^\s*(\d+)\s*[-.,/]\s*(\d+)\s*$/.exec(String(v == null ? '' : v)); return m ? { shelf: m[1], slot: m[2] } : null; }
+  function shelfLab(v) { var m = shelfParts(v); return m ? m.shelf + ', section ' + m.slot : String(v == null ? '' : v); }
   function syncShelfPick() {
     var host = $('#shelfPick'), info = window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(F.section.value) : null;
     if (!info || info.shelves < 2) { host.innerHTML = ''; host.hidden = true; return; }
-    var cur = String(F.shelf.value || '').trim(), h = '';
+    var raw = String(F.shelf.value || '').trim(), pr = shelfParts(raw), cur = pr ? pr.shelf : raw, h = '', cn = pr || /^\d+$/.test(raw) ? parseInt(cur, 10) : -1, sec = '';
     for (var i = 0; i <= info.shelves; i++) h += '<button class="chip" type="button" data-shelf="' + i + '" aria-pressed="' + (cur === String(i)) + '">' + i + '</button>';
-    host.innerHTML = '<span class="hint">Shelf (0 = on top of the box, 1 = the ' + (info.topFirst ? 'top' : 'bottom') + ' shelf)</span><div class="chips">' + h + '</div>';
+    var cc = info.cells && cn >= 1 ? info.cells[cn - 1] : 1;
+    if (cc > 1) { sec = '<span class="hint">Section on shelf ' + cn + ' (counted from the left of the map)</span><div class="chips">'; for (var j = 1; j <= cc; j++) sec += '<button class="chip" type="button" data-slot="' + j + '" aria-pressed="' + (pr && pr.slot === String(j)) + '">' + j + '</button>'; sec += '</div>'; }
+    host.innerHTML = '<span class="hint">Shelf (0 = on top of the box, 1 = the ' + (info.topFirst ? 'top' : 'bottom') + ' shelf)</span><div class="chips">' + h + '</div>' + sec;
     host.hidden = false;
   }
   function closeSheet() { $('#sheetScrim').hidden = true; editing = null; }
@@ -563,6 +568,8 @@
   F.section.addEventListener('input', syncShelfPick);
   F.shelf.addEventListener('input', syncShelfPick);
   $('#shelfPick').addEventListener('click', function (e) {
+    var sb = e.target.closest('[data-slot]');
+    if (sb) { var pr0 = shelfParts(F.shelf.value), base = pr0 ? pr0.shelf : String(F.shelf.value || '').trim(); F.shelf.value = base + '-' + sb.getAttribute('data-slot'); syncShelfPick(); return; }
     var b = e.target.closest('[data-shelf]');
     if (!b) return;
     F.shelf.value = b.getAttribute('data-shelf');
@@ -580,7 +587,7 @@
     ov.className = 'printov';
     var cur = null, body = '';
     rows.forEach(function (i) {
-      var sh = i.shelf === '0' ? 'On top' : (i.shelf ? 'Shelf ' + i.shelf : 'No shelf');
+      var sh = i.shelf === '0' ? 'On top' : (i.shelf ? 'Shelf ' + shelfLab(i.shelf) : 'No shelf');
       if (sh !== cur) { cur = sh; body += '<tr class="ph"><td colspan="4">' + esc(sh) + '</td></tr>'; }
       body += '<tr><td class="pc">☐</td><td>' + esc(i.brand) + (i.flavor ? ' ' + esc(i.flavor) : '') + (i.size ? ' <small>' + esc(i.size) + '</small>' : '') + '</td><td>' + esc(i.code || '') + '</td><td class="pq">' + esc(i.qty || '') + '</td></tr>';
     });
@@ -679,7 +686,7 @@
     $('#stockScrim').hidden = false;
     setTimeout(function () { $('#stSection').focus(); }, 40);
   }
-  function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + c.shelf : ''); }
+  function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + shelfLab(c.shelf) : ''); }
   $('#stockBtn').addEventListener('click', openStock);
   $('#stockClose').addEventListener('click', function () { $('#stockScrim').hidden = true; });
   $('#stockForm').addEventListener('submit', function (e) {
@@ -798,7 +805,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v62';
+  var APP_VERSION = 'v63';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

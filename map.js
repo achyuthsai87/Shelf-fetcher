@@ -19,6 +19,14 @@
     var L = Math.min(Math.max(lvl, 1), n);
     return h * (topFirst ? 1 - (L - 0.5) / n : (L - 0.5) / n);
   }
+  /* Sections on each shelf: z.cells[k-1] is how many cubbies shelf k is divided into (left to right, or top to bottom of the map for a box that runs that way). */
+  function cellsOf(z) {
+    var n = zoneN(z), out = [], k;
+    for (k = 0; k < n; k++) { var v = z.cells && z.cells[k] ? Math.round(z.cells[k]) : 1; out.push(v >= 1 && v <= 24 ? v : 1); }
+    return out;
+  }
+  function slotNumber(s) { var m = /^\s*\d+\s*[-.,/]\s*(\d+)\s*$/.exec(String(s == null ? '' : s)); return m ? parseInt(m[1], 10) : 0; }
+  function bandRange(Z, n, k, topFirst) { return topFirst ? [Z * (1 - k / n), Z * (1 - (k - 1) / n)] : [Z * (k - 1) / n, Z * k / n]; }
   function findZone(zones, section) {
     var k = String(section == null ? '' : section).trim().toLowerCase();
     if (!k) return null;
@@ -246,20 +254,32 @@
             ctx.fillStyle = f.col;
             poly(ctx, pts);
             ctx.fill();
+            var cl = cellsOf(z), longX = z.w >= z.h, isLong = alongX === longX;
             if (sel && st.selLevel !== undefined) {
               var lv = st.selLevel ? Math.min(Math.max(st.selLevel, 1), n) : 0;
               if (lv && n > 1) {
                 var za = st.topFirst ? Z * (1 - lv / n) : Z * (lv - 1) / n, zb = st.topFirst ? Z * (1 - (lv - 1) / n) : Z * lv / n;
-                ctx.fillStyle = pal.hi;
-                ctx.globalAlpha = 0.85;
-                var bq = [P(A[0], A[1], za), P(B[0], B[1], za), P(B[0], B[1], zb), P(A[0], A[1], zb)];
-                poly(ctx, bq);
-                ctx.fill();
-                ctx.globalAlpha = 1;
-                var bA = 0, bi;
-                for (bi = 0; bi < 4; bi++) { var b1 = bq[bi], b2 = bq[(bi + 1) % 4]; bA += b1.X * b2.Y - b2.X * b1.Y; }
-                bA = Math.abs(bA) / 2;
-                if (!bandBest || bA > bandBest.a) bandBest = { a: bA, X: (bq[0].X + bq[1].X + bq[2].X + bq[3].X) / 4, Y: (bq[0].Y + bq[1].Y + bq[2].Y + bq[3].Y) / 4 };
+                var cc = cl[lv - 1], slot = st.selSlot && cc > 1 && st.selSlot <= cc ? st.selSlot : 0, hA = A, hB = B, show = true;
+                if (slot) {
+                  if (!isLong) show = false;
+                  else {
+                    var c0 = Math.max(sg[0], lo + (hi - lo) * (slot - 1) / cc), c1 = Math.min(sg[1], lo + (hi - lo) * slot / cc);
+                    if (c1 - c0 < 0.0005) show = false;
+                    else { var cu = rev ? c1 : c0, cv2 = rev ? c0 : c1; hA = alongX ? [cu, FA[1]] : [FA[0], cu]; hB = alongX ? [cv2, FA[1]] : [FA[0], cv2]; }
+                  }
+                }
+                if (show) {
+                  ctx.fillStyle = pal.hi;
+                  ctx.globalAlpha = 0.85;
+                  var bq = [P(hA[0], hA[1], za), P(hB[0], hB[1], za), P(hB[0], hB[1], zb), P(hA[0], hA[1], zb)];
+                  poly(ctx, bq);
+                  ctx.fill();
+                  ctx.globalAlpha = 1;
+                  var bA = 0, bi;
+                  for (bi = 0; bi < 4; bi++) { var b1 = bq[bi], b2 = bq[(bi + 1) % 4]; bA += b1.X * b2.Y - b2.X * b1.Y; }
+                  bA = Math.abs(bA) / 2;
+                  if (!bandBest || bA > bandBest.a) bandBest = { a: bA, X: (bq[0].X + bq[1].X + bq[2].X + bq[3].X) / 4, Y: (bq[0].Y + bq[1].Y + bq[2].Y + bq[3].Y) / 4 };
+                }
               }
             }
             ctx.strokeStyle = pal.line;
@@ -267,6 +287,20 @@
             for (var k = 1; k < n; k++) {
               var zz = Z * k / n, l1 = P(A[0], A[1], zz), l2 = P(B[0], B[1], zz);
               ctx.beginPath(); ctx.moveTo(l1.X, l1.Y); ctx.lineTo(l2.X, l2.Y); ctx.stroke();
+            }
+            if (isLong && n > 1 && z.cells) {
+              ctx.lineWidth = 1.5;
+              for (var sk = 1; sk <= n; sk++) {
+                var sc = cl[sk - 1]; if (sc < 2) continue;
+                var br = bandRange(Z, n, sk, st.topFirst), si;
+                for (si = 1; si < sc; si++) {
+                  var tt = lo + (hi - lo) * si / sc;
+                  if (tt <= sg[0] + 0.0005 || tt >= sg[1] - 0.0005) continue;
+                  var d1 = alongX ? P(tt, FA[1], br[0]) : P(FA[0], tt, br[0]), d2 = alongX ? P(tt, FA[1], br[1]) : P(FA[0], tt, br[1]);
+                  ctx.beginPath(); ctx.moveTo(d1.X, d1.Y); ctx.lineTo(d2.X, d2.Y); ctx.stroke();
+                }
+              }
+              ctx.lineWidth = 1;
             }
             ctx.strokeStyle = pal.edge;
             poly(ctx, pts);
@@ -452,7 +486,7 @@
     last = drawScene(ctx, W, H, {
       img: imgEl, imgW: imgEl.naturalWidth, imgH: imgEl.naturalHeight, aspect: imgEl.naturalWidth / imgEl.naturalHeight,
       zones: map.zones, yaw: yaw, elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
-      zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
+      zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, selSlot: z ? sel.slot : 0, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
       dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast
     });
     if (focusDot && z && last.dot && !edit) {
@@ -468,7 +502,7 @@
       dw.hidden = false;
       dw.style.left = last.dot.X + 'px';
       dw.style.top = last.dot.Y + 'px';
-      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level : (sel.item && String(spot(sel.item).shelf).trim() === '0' ? ' · On top' : ''));
+      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level + (sel.slot && cellsOf(z)[Math.min(sel.level, cellsOf(z).length) - 1] >= sel.slot ? ' · Section ' + sel.slot : '') : (sel.item && String(spot(sel.item).shelf).trim() === '0' ? ' · On top' : ''));
     } else dw.hidden = true;
   }
 
@@ -546,7 +580,7 @@
   function selectItem(it) {
     held = it;
     var sp = spot(it), z = map ? findZone(map.zones, sp.section) : null;
-    sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), item: it };
+    sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), slot: slotNumber(sp.shelf), item: it };
     if (edit) { edit = false; restoreView(); }
     zoom = 1; panX = 0; panY = 0;
     focusDot = !!z;
@@ -571,6 +605,7 @@
     $('#zoneTitle').textContent = z ? 'Edit section' : 'Name this section';
     $('#zName').value = z ? z.name : (pendingName || '');
     $('#zShelves').value = z ? (z.shelves || 5) : 5;
+    zoneCells = z && z.cells ? cellsOf(z).slice() : [];
     setKind(z && z.kind ? z.kind : 'tall');
     $('#zDelete').hidden = !z;
     setHs(z && z.hs ? z.hs : 1);
@@ -583,7 +618,26 @@
     $('#zoneScrim').hidden = false;
     setTimeout(function () { $('#zName').focus(); }, 30);
   }
-  var zoneKind = 'tall', zoneHs = 1;
+  var zoneKind = 'tall', zoneHs = 1, zoneCells = [];
+  function shelvesNow() { var n = Math.round(parseFloat($('#zShelves').value)); return n >= 1 && n <= 12 ? n : 5; }
+  function renderCells() {
+    var host = $('#zCells'), n = shelvesNow(), k, rows = [], top = !map || map.topFirst !== false;
+    $('#zCellsField').hidden = !(zoneKind === 'tall' || zoneKind === 'cooler' || zoneKind === 'freezer') || n < 2;
+    for (k = 0; k < n; k++) if (!(zoneCells[k] >= 1)) zoneCells[k] = 1;
+    zoneCells.length = n;
+    function row(label, key, val) { return '<div class="cellrow"><span>' + label + '</span><button class="tbtn" type="button" data-cm="' + key + '" aria-label="Fewer">−</button><b>' + val + '</b><button class="tbtn" type="button" data-cp="' + key + '" aria-label="More">+</button></div>'; }
+    for (k = 1; k <= n; k++) rows.push(row('Shelf ' + k + (n > 1 ? (k === 1 ? (top ? ' (top)' : ' (bottom)') : (k === n ? (top ? ' (bottom)' : ' (top)') : '')) : ''), k, zoneCells[k - 1]));
+    if (!top) rows.reverse();
+    host.innerHTML = row('All shelves', 'all', zoneCells.every(function (v) { return v === zoneCells[0]; }) ? zoneCells[0] : '—') + rows.join('');
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('#zCells [data-cm], #zCells [data-cp]') : null; if (!b) return;
+    var key = b.getAttribute('data-cm') || b.getAttribute('data-cp'), d = b.hasAttribute('data-cp') ? 1 : -1, k;
+    function bump(i) { zoneCells[i] = Math.max(1, Math.min(24, (zoneCells[i] || 1) + d)); }
+    if (key === 'all') { var base = zoneCells.every(function (v) { return v === zoneCells[0]; }) ? zoneCells[0] : (d > 0 ? Math.max.apply(null, zoneCells) : Math.min.apply(null, zoneCells)); for (k = 0; k < zoneCells.length; k++) zoneCells[k] = Math.max(1, Math.min(24, base + (zoneCells.every(function (v) { return v === zoneCells[0]; }) ? d : 0))); }
+    else bump(parseInt(key, 10) - 1);
+    renderCells();
+  });
   function setHs(v) {
     zoneHs = v;
     Array.prototype.forEach.call(document.querySelectorAll('#zHeight [data-hs]'), function (b) { b.setAttribute('aria-pressed', String(parseFloat(b.getAttribute('data-hs')) === v)); });
@@ -616,18 +670,26 @@
     Array.prototype.forEach.call(document.querySelectorAll('#zKind [data-kind]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-kind') === k)); });
     $('#zShelvesField').hidden = !(k === 'tall' || k === 'cooler' || k === 'freezer');
     $('#zHeightField').hidden = k === 'flat';
+    renderCells();
   }
   function closeZone() { $('#zoneScrim').hidden = true; zoneEditing = null; openZone.rect = null; }
+  function applyCells(z, sh) {
+    var shelfy = zoneKind === 'tall' || zoneKind === 'cooler' || zoneKind === 'freezer', cs = zoneCells.slice(0, sh);
+    while (cs.length < sh) cs.push(1);
+    if (shelfy && cs.some(function (v) { return v > 1; })) z.cells = cs; else delete z.cells;
+  }
   function saveZone() {
     var name = $('#zName').value.trim(), sh = Math.round(parseFloat($('#zShelves').value));
     if (!name) { $('#zoneErr').textContent = 'Enter the aisle or section name, for example Aisle 3.'; $('#zoneErr').hidden = false; return; }
     if (!(sh >= 1 && sh <= 12)) sh = 5;
     if (zoneEditing) {
       var z = map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
-      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; }
+      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; applyCells(z, sh); }
     } else if (openZone.rect) {
       var r = openZone.rect;
-      map.zones.push({ id: newId(), name: name, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs });
+      var nz = { id: newId(), name: name, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs };
+      applyCells(nz, sh);
+      map.zones.push(nz);
     }
     if (pendingName && pendingName.toLowerCase() === name.toLowerCase()) pendingName = '';
     if (!persist()) toast('This phone has no room left to keep the map.');
@@ -953,6 +1015,7 @@
       var label = { tall: 'Shelves', cooler: 'Cooler', freezer: 'Freezer', low: 'Counter' }[bulkKind];
       toast(hit.length + ' box' + (hit.length === 1 ? '' : 'es') + ' set to ' + label + (miss.length ? '. Not found: ' + miss.slice(0, 4).join(', ') + (miss.length > 4 ? '...' : '') : ''));
     });
+    $('#zShelves').addEventListener('input', renderCells);
     $('#zHeight').addEventListener('click', function (e) { var b = e.target.closest('[data-hs]'); if (b) setHs(parseFloat(b.getAttribute('data-hs'))); });
     $('#zSplitX').addEventListener('click', function () { splitZone('x'); });
     $('#zSplitY').addEventListener('click', function () { splitZone('y'); });
@@ -973,7 +1036,7 @@
     zoneNames: function (id) { var m = this.mapOf(id || 'main'); return m && m.zones ? m.zones.map(function (z) { return z.name; }) : []; },
     zoneInfo: function (name, id) {
       var m = this.mapOf(id || 'main'), z = m && m.zones ? findZone(m.zones, name) : null;
-      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false, kind: z.kind || 'tall' } : null;
+      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false, kind: z.kind || 'tall', cells: z.cells ? cellsOf(z) : null } : null;
     },
     onShow: function () { refresh(); },
     show: function (it, id) {
