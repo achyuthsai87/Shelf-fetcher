@@ -444,18 +444,33 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v11';
+  var APP_VERSION = 'v12';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
-  $('#updateBtn').addEventListener('click', function () {
-    var b = this;
-    b.textContent = 'Updating...';
-    b.disabled = true;
+  var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
+  /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
+     worker and its caches, then reload. (Just unregistering is not enough: the browser would still
+     hand back its own saved copies of the scripts for up to ten minutes.) */
+  function hardUpdate(btn) {
+    if (btn) { btn.textContent = 'Updating...'; btn.disabled = true; }
+    var fetches = Promise.all(FILES.map(function (f) { return fetch(f, { cache: 'reload' }).catch(function () {}); }));
     var regs = 'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve();
     var cs = window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : Promise.resolve();
-    Promise.all([regs, cs]).catch(function () {}).then(function () {
-      location.replace(location.pathname + '?u=' + Date.now());
-    });
-  });
+    Promise.all([fetches, regs, cs]).catch(function () {}).then(function () { location.replace(location.pathname + '?u=' + Date.now()); });
+  }
+  $('#updateBtn').addEventListener('click', function () { hardUpdate(this); });
+  $('#updateBar').addEventListener('click', function () { hardUpdate(null); this.textContent = 'Updating...'; });
+  /* Tell the person when a newer version is online (checked on open and on return to the app). */
+  function checkVersion() {
+    if (!navigator.onLine || !window.fetch) return;
+    fetch('./sw.js', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+      var m = /shelf-finder-v(\d+)/.exec(t), mine = parseInt(String(APP_VERSION).replace(/\D/g, ''), 10);
+      var newer = !!(m && parseInt(m[1], 10) > mine);
+      $('#updateBar').hidden = !newer;
+      if (newer) $('#updateBar').textContent = 'A new version is ready. Tap to update.';
+    }).catch(function () {});
+  }
+  checkVersion();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkVersion(); });
   if ('serviceWorker' in navigator) {
     var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });

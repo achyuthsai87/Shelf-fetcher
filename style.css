@@ -423,3 +423,5 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .srows li:active, .item:active { opacity: 0.85; }
 #shelfPick { display: grid; gap: 6px; }
 #shelfPick .chips { flex-wrap: wrap; overflow: visible; }
+
+.updatebar { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 60; border: 0; border-radius: 99px; padding: 10px 18px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; box-shadow: var(--shadow); max-width: calc(100% - 28px); }
