@@ -922,7 +922,7 @@
     });
     $('#bulkApply').addEventListener('click', function () {
       var raw = $('#bulkNames').value, names = [];
-      raw.split(/[,;\n]+/).forEach(function (t) {
+      raw.split(/[,;\n&+]+|\s+and\s+/i).forEach(function (t) {
         t = t.trim(); if (!t) return;
         var m = /^([A-Za-z]*)\s*(\d+)\s*[-–]\s*(?:[A-Za-z]*)\s*(\d+)$/.exec(t);
         if (m && parseInt(m[3], 10) >= parseInt(m[2], 10) && parseInt(m[3], 10) - parseInt(m[2], 10) < 200) { for (var n = parseInt(m[2], 10); n <= parseInt(m[3], 10); n++) names.push(m[1] + n); }
