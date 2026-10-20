@@ -8,8 +8,8 @@
   var ZH_BASE = 0.05, ZH_PER = 0.018;
   function zoneH(z) {
     if (z.kind === 'flat') return 0.006;
-    if (z.kind === 'low') return 0.06;
-    return ZH_BASE + ZH_PER * (z.shelves || 5);
+    if (z.kind === 'low') return 0.06 * (z.hs || 1);
+    return (ZH_BASE + ZH_PER * (z.shelves || 5)) * (z.hs || 1);
   }
   function zoneN(z) { return (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5); }
   function shelfNumber(s) { var m = String(s == null ? '' : s).match(/\d+/); return m ? parseInt(m[0], 10) : 0; }
@@ -564,6 +564,8 @@
     $('#zShelves').value = z ? (z.shelves || 5) : 5;
     setKind(z && z.kind ? z.kind : 'tall');
     $('#zDelete').hidden = !z;
+    setHs(z && z.hs ? z.hs : 1);
+    $('#zSplitBox').hidden = !z;
     $('#zoneErr').hidden = true;
     var names = {};
     items().forEach(function (i) { var sp = spot(i); if (sp.section) names[sp.section.toLowerCase()] = sp.section; });
@@ -572,11 +574,38 @@
     $('#zoneScrim').hidden = false;
     setTimeout(function () { $('#zName').focus(); }, 30);
   }
-  var zoneKind = 'tall';
+  var zoneKind = 'tall', zoneHs = 1;
+  function setHs(v) {
+    zoneHs = v;
+    Array.prototype.forEach.call(document.querySelectorAll('#zHeight [data-hs]'), function (b) { b.setAttribute('aria-pressed', String(parseFloat(b.getAttribute('data-hs')) === v)); });
+  }
+  /* Split one box into equal parts: K becomes K1, K2, K3; K1 becomes K1a, K1b, K1c. */
+  function splitZone(dir) {
+    var z = zoneEditing && map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
+    var n = Math.round(parseFloat($('#zSplitN').value));
+    if (!z) return;
+    if (!(n >= 2 && n <= 12)) { $('#zoneErr').textContent = 'Choose 2 to 12 parts.'; $('#zoneErr').hidden = false; return; }
+    if (window.ShelfBackup) window.ShelfBackup.snapshot('Before splitting a section');
+    var sh = Math.round(parseFloat($('#zShelves').value)); if (!(sh >= 1 && sh <= 12)) sh = z.shelves || 5;
+    var base = String(z.name || '').trim(), letters = /\d$/.test(base), parts = [], i;
+    for (i = 0; i < n; i++) {
+      var nm = letters ? base + String.fromCharCode(97 + i) : base + (i + 1);
+      var r = dir === 'x' ? { x: z.x + z.w * i / n, y: z.y, w: z.w / n, h: z.h } : { x: z.x, y: z.y + z.h * i / n, w: z.w, h: z.h / n };
+      parts.push({ id: newId(), name: nm, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs });
+    }
+    var at = map.zones.indexOf(z);
+    map.zones.splice.apply(map.zones, [at, 1].concat(parts));
+    if (!persist()) toast('This phone has no room left to keep the map.');
+    closeZone();
+    notify();
+    refresh();
+    toast(base + ' is now ' + parts[0].name + ' to ' + parts[parts.length - 1].name + '. Bottles that said ' + base + ' need the new names.');
+  }
   function setKind(k) {
     zoneKind = k;
     Array.prototype.forEach.call(document.querySelectorAll('#zKind [data-kind]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-kind') === k)); });
     $('#zShelvesField').hidden = k !== 'tall';
+    $('#zHeightField').hidden = k === 'flat';
   }
   function closeZone() { $('#zoneScrim').hidden = true; zoneEditing = null; openZone.rect = null; }
   function saveZone() {
@@ -585,10 +614,10 @@
     if (!(sh >= 1 && sh <= 12)) sh = 5;
     if (zoneEditing) {
       var z = map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
-      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; }
+      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; }
     } else if (openZone.rect) {
       var r = openZone.rect;
-      map.zones.push({ id: newId(), name: name, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind });
+      map.zones.push({ id: newId(), name: name, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs });
     }
     if (pendingName && pendingName.toLowerCase() === name.toLowerCase()) pendingName = '';
     if (!persist()) toast('This phone has no room left to keep the map.');
@@ -876,6 +905,9 @@
     $('#zoneForm').addEventListener('submit', function (e) { e.preventDefault(); saveZone(); });
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
+    $('#zHeight').addEventListener('click', function (e) { var b = e.target.closest('[data-hs]'); if (b) setHs(parseFloat(b.getAttribute('data-hs'))); });
+    $('#zSplitX').addEventListener('click', function () { splitZone('x'); });
+    $('#zSplitY').addEventListener('click', function () { splitZone('y'); });
     $('#zoneScrim').addEventListener('mousedown', function (e) { if (e.target === this) closeZone(); });
     loadImage(function () { refresh(); notify(); });
   }
