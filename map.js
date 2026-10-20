@@ -43,10 +43,11 @@
     });
     var m = 14;
     var k = Math.min((W - 2 * m) / (maxX - minX), (H - 2 * m) / (maxY - minY));
-    k *= zoom || 1;
+    var zz = zoom || 1, zd = Math.min(zz, 2.2), zs = zz / zd;
+    k *= zs;
     var ox = W / 2 - k * (minX + maxX) / 2 + (panX || 0), oy = H / 2 + k * (minY + maxY) / 2 + (panY || 0);
     return function (u, v, z) {
-      var r = raw(u, v, z || 0), s = 1 / (D - r.t);
+      var r = raw(u, v, z || 0), s = 1 / (D / zd - r.t);
       return { X: ox + r.sx * s * k, Y: oy - r.sy * s * k, t: r.t };
     };
   }
@@ -389,8 +390,10 @@
     });
     if (focusDot && z && last.dot && !edit) {
       focusDot = false;
-      var f = 2.2, ccx = W / 2, ccy = H / 2;
-      zoom = f; panX = -(last.dot.X - ccx) * f; panY = -(last.dot.Y - ccy) * f;
+      zoom = 2.2; panX = 0; panY = 0;
+      var lz = levelZ(z, sel.level || 0, map.topFirst !== false), dp = buildProj(zoom, 0, 0)(z.x + z.w / 2, z.y + z.h / 2, lz);
+      panX = W / 2 - dp.X; panY = H / 2 - dp.Y;
+      clampPan();
       paint();
       return;
     }
@@ -533,18 +536,42 @@
     panX = Math.max(-mx, Math.min(mx, panX));
     panY = Math.max(-my, Math.min(my, panY));
   }
-  function setZoom(nz, fx, fy) {
+  /* The camera for a given zoom and pan, the same one drawScene uses. */
+  function buildProj(zm, px, py) {
+    var cv = $('#mapCanvas'), W = cv.clientWidth, H = cv.clientHeight, zmax = 0.2;
+    if (!edit) map.zones.forEach(function (q) { zmax = Math.max(zmax, zoneH(q)); });
+    var yw = edit ? 0 : yaw + (rot ? -Math.PI / 2 : 0), el = edit ? Math.PI / 2 : elev;
+    return makeProj(W, H, imgEl.naturalWidth / imgEl.naturalHeight, yw, el, edit ? 0.02 : zmax, zm, px, py);
+  }
+  /* The spot on the floor (0..1) that sits under a screen point. */
+  function floorUV(P, X, Y) {
+    var u = 0.5, v = 0.5, e = 0.001, i;
+    for (i = 0; i < 12; i++) {
+      var f = P(u, v, 0), fu = P(u + e, v, 0), fv = P(u, v + e, 0);
+      var a = (fu.X - f.X) / e, c = (fu.Y - f.Y) / e, b = (fv.X - f.X) / e, d = (fv.Y - f.Y) / e;
+      var det = a * d - b * c;
+      if (Math.abs(det) < 1e-9) break;
+      var dx = X - f.X, dy = Y - f.Y;
+      u += (d * dx - b * dy) / det;
+      v += (-c * dx + a * dy) / det;
+    }
+    return { u: u, v: v };
+  }
+  /* Move the camera closer or further while keeping the floor spot under (fx, fy) in place. */
+  function zoomAt(nz, fx, fy) {
+    if (!map || !imgEl) return;
     nz = Math.max(1, Math.min(6, nz));
-    var cv = $('#mapCanvas'), cx = cv.clientWidth / 2, cy = cv.clientHeight / 2;
-    if (fx == null) { fx = cx; fy = cy; }
-    var f = nz / zoom;
-    panX = fx - cx - (fx - cx - panX) * f;
-    panY = fy - cy - (fy - cy - panY) * f;
+    var cv = $('#mapCanvas');
+    if (fx == null) { fx = cv.clientWidth / 2; fy = cv.clientHeight / 2; }
+    var uv = floorUV(buildProj(zoom, panX, panY), fx, fy);
     zoom = nz;
+    var q = buildProj(zoom, panX, panY)(uv.u, uv.v, 0);
+    panX += fx - q.X; panY += fy - q.Y;
     if (zoom === 1) { panX = 0; panY = 0; }
     clampPan();
     schedule();
   }
+  function setZoom(nz, fx, fy) { zoomAt(nz, fx, fy); }
   function pinchDist() { var k = Object.keys(pointers); return Math.hypot(pointers[k[0]].x - pointers[k[1]].x, pointers[k[0]].y - pointers[k[1]].y) || 1; }
   function pinchMid() { var k = Object.keys(pointers); return { x: (pointers[k[0]].x + pointers[k[1]].x) / 2, y: (pointers[k[0]].y + pointers[k[1]].y) / 2 }; }
   function onDown(e) {
@@ -583,14 +610,7 @@
       var mid = pinchMid();
       panX += mid.x - pinch.mid.x; panY += mid.y - pinch.mid.y;
       pinch.mid = mid;
-      var nz = Math.max(1, Math.min(6, pinch.z * pinchDist() / pinch.d)), cv0 = $('#mapCanvas');
-      var f = nz / zoom, cx = cv0.clientWidth / 2, cy = cv0.clientHeight / 2;
-      panX = mid.x - cx - (mid.x - cx - panX) * f;
-      panY = mid.y - cy - (mid.y - cy - panY) * f;
-      zoom = nz;
-      if (zoom === 1) { panX = 0; panY = 0; }
-      clampPan();
-      schedule();
+      zoomAt(pinch.z * pinchDist() / pinch.d, mid.x, mid.y);
       return;
     }
     if (!drawing) return;
