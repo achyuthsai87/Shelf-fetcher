@@ -865,7 +865,7 @@
           on.textContent = 'Looking up the name online to help...';
           lookupCode(code).then(function (info) {
             if (!card.contains(on)) return;
-            if (info && !typed) { on.textContent = 'Online name: ' + info.name; q.value = info.name.replace(/['’`]/g, ''); render(); } else on.textContent = info ? 'Online name: ' + info.name : '';
+            if (info && !typed) { on.textContent = 'Online name: ' + info.name; q.value = info.name.replace(/['’`]/g, '').replace(/\d+(?:\.\d+)?\s*(?:ml|l|oz|fl\.?\s*oz)\b/ig, '').trim().split(/\s+/).slice(0, 2).join(' '); render(); } else on.textContent = info ? 'Online name: ' + info.name : '';
           });
           card.querySelector('[data-pback]').addEventListener('click', main);
           card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
