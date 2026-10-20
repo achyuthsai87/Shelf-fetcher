@@ -394,8 +394,8 @@
     if (!it) return;
     if (!b) {
       var lb = e.target.closest('.loc');
-      if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has()) { window.ShelfMap.show(it); return; }
-      openSheet(it); return;
+      if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has()) window.ShelfMap.show(it);
+      return;
     }
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
     if (b.getAttribute('data-act') === 'map') { window.ShelfMap.show(it); return; }
@@ -473,7 +473,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v44';
+  var APP_VERSION = 'v45';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
