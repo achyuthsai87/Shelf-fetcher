@@ -432,7 +432,7 @@
       dw.hidden = false;
       dw.style.left = last.dot.X + 'px';
       dw.style.top = last.dot.Y + 'px';
-      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level : '');
+      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level : (sel.item && String(sel.item.shelf).trim() === '0' ? ' · On top' : ''));
     } else dw.hidden = true;
   }
 
@@ -479,7 +479,7 @@
     if (!sel || !sel.item) { c.hidden = true; return; }
     var it = sel.item, z = map && map.zones.filter(function (q) { return q.id === sel.zoneId; })[0];
     var name = it.brand + (it.flavor ? ' ' + it.flavor : '');
-    var where = it.section ? it.section + (it.shelf ? ', shelf ' + it.shelf : '') : 'No spot saved yet';
+    var where = it.section ? it.section + (it.shelf ? (String(it.shelf).trim() === '0' ? ', on top' : ', shelf ' + it.shelf) : '') : 'No spot saved yet';
     c.hidden = false;
     c.innerHTML = '<strong>' + esc(name) + '</strong><span>' + esc(where) + '</span>' +
       (z ? '' : (it.section ? '<em>' + esc(it.section) + ' is not marked on the map yet. Tap Edit sections to add it.</em>' : ''));

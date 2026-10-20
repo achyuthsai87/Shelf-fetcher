@@ -157,7 +157,7 @@
     list.innerHTML = shown.map(function (it) {
       var meta = [it.type, it.size].filter(Boolean).join(' · ');
       var loc = it.section || it.shelf
-        ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.section ? 'Shelf ' : '') + hl(it.shelf) + '</span>' : '') + '</div>'
+        ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.shelf === '0' && it.section ? 'On top' : (it.section ? 'Shelf ' : '') + hl(it.shelf)) + '</span>' : '') + '</div>'
         : '<div class="loc none"><span class="sec">No spot yet</span></div>';
       return '<li class="glass item" data-id="' + esc(it.id) + '"><div class="row"><div class="info">' +
         '<h3 class="brand">' + hl(it.brand) + '</h3>' +
@@ -237,8 +237,8 @@
     var host = $('#shelfPick'), info = window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(F.section.value) : null;
     if (!info || info.shelves < 2) { host.innerHTML = ''; host.hidden = true; return; }
     var cur = String(F.shelf.value || '').trim(), h = '';
-    for (var i = 1; i <= info.shelves; i++) h += '<button class="chip" type="button" data-shelf="' + i + '" aria-pressed="' + (cur === String(i)) + '">' + i + '</button>';
-    host.innerHTML = '<span class="hint">Shelf (1 is the ' + (info.topFirst ? 'top' : 'bottom') + ')</span><div class="chips">' + h + '</div>';
+    for (var i = 0; i <= info.shelves; i++) h += '<button class="chip" type="button" data-shelf="' + i + '" aria-pressed="' + (cur === String(i)) + '">' + i + '</button>';
+    host.innerHTML = '<span class="hint">Shelf (0 = on top of the box, 1 = the ' + (info.topFirst ? 'top' : 'bottom') + ' shelf)</span><div class="chips">' + h + '</div>';
     host.hidden = false;
   }
   function closeSheet() { $('#sheetScrim').hidden = true; editing = null; }
@@ -473,7 +473,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v47';
+  var APP_VERSION = 'v48';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
