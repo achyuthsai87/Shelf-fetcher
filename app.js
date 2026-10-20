@@ -427,7 +427,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v8';
+  var APP_VERSION = 'v9';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   $('#updateBtn').addEventListener('click', function () {
     var b = this;
@@ -442,6 +442,6 @@
   if ('serviceWorker' in navigator) {
     var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });
-    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (r) { r.update(); }).catch(function () {}); });
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (r) { document.addEventListener('visibilitychange', function () { if (!document.hidden) r.update().catch(function () {}); }); r.update().catch(function () {}); }).catch(function () {}); });
   }
 })();
