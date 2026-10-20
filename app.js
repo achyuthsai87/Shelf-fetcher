@@ -272,20 +272,34 @@
     var msg = $('#importMsg');
     var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
     if (!lines.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
-    var seen = {};
-    items.forEach(function (i) { seen[dupKey(i)] = 1; });
-    var added = 0, skipped = 0, fresh = [];
+    var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'] };
+    var cols = { brand: 0, flavor: 1, type: 2, size: 3, section: 4, shelf: 5 }, hasHeader = false;
+    var h0 = parseLine(lines[0], delim).map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
+    var map2 = {}, hits = 0;
+    Object.keys(ALIASES).forEach(function (f) { var ix = -1; ALIASES[f].forEach(function (al) { if (ix < 0) ix = h0.indexOf(al); }); if (ix >= 0) { map2[f] = ix; hits++; } });
+    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, section: -1, shelf: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
+    var byKey = {};
+    items.forEach(function (i) { byKey[dupKey(i)] = i; });
+    var added = 0, updated = 0, same = 0, fresh = [];
     lines.forEach(function (l, idx) {
-      var c = parseLine(l, l.indexOf('\t') >= 0 ? '\t' : ',');
-      if (idx === 0 && /^brand$/i.test(c[0])) return;
-      if (!c[0]) return;
-      var it = mk({ id: newId(), brand: c[0], flavor: c[1], type: c[2], size: c[3], section: c[4], shelf: c[5], updatedAt: Date.now() });
-      var k = dupKey(it);
-      if (seen[k]) { skipped++; return; }
-      seen[k] = 1;
+      if (idx === 0 && hasHeader) return;
+      var c = parseLine(l, delim);
+      var g = function (f) { return cols[f] >= 0 && cols[f] < c.length ? c[cols[f]] : ''; };
+      if (!g('brand')) return;
+      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), section: g('section'), shelf: g('shelf'), updatedAt: Date.now() });
+      var k = dupKey(it), old = byKey[k];
+      if (old) {
+        var ch = false;
+        ['type', 'section', 'shelf'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
+        if (ch) { old.updatedAt = Date.now(); updated++; } else same++;
+        return;
+      }
+      byKey[k] = it;
       fresh.push(it);
       added++;
     });
+    var skipped = same;
     var prev = items.slice();
     items = items.concat(fresh);
     if (!saveLocal()) {
@@ -295,9 +309,9 @@
       return;
     }
     renderAll();
-    msg.textContent = 'Added ' + added + (skipped ? ', skipped ' + skipped + ' already listed' : '') + '.';
+    msg.textContent = 'Added ' + added + (updated ? ', updated location on ' + updated : '') + (skipped ? ', ' + skipped + ' already up to date' : '') + '.';
     msg.hidden = false;
-    if (added) { $('#importText').value = ''; $('#importFile').value = ''; }
+    if (added || updated) { $('#importText').value = ''; $('#importFile').value = ''; }
   }
   function csvCell(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   function exportCsv() {
