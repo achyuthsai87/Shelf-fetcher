@@ -561,6 +561,18 @@
     cv.addEventListener('pointercancel', function () { drawing = null; fast = false; schedule(); });
     window.addEventListener('resize', schedule);
     $('#mapPickBtn').addEventListener('click', function () { $('#mapFile').click(); });
+    $('#mapStarterBtn').addEventListener('click', function () {
+      Promise.all([fetch('./starter-layout.json').then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
+        var fr = new FileReader();
+        fr.onload = function () {
+          var prev = map;
+          map = { img: fr.result, w: res[0].w, h: res[0].h, zones: res[0].zones, topFirst: true };
+          if (!persist()) { map = prev; toast('This phone has no room left to keep the map.'); return; }
+          loadImage(function () { refresh(); notify(); toast('Store layout loaded'); });
+        };
+        fr.readAsDataURL(res[1]);
+      }).catch(function () { toast('Could not load the layout. Check your connection.'); });
+    });
     $('#mapReplaceBtn').addEventListener('click', function () { $('#mapFile').click(); });
     $('#mapFile').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
