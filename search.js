@@ -4,7 +4,7 @@
    shown as a suggestion, never mixed into the results. */
 (function (root) {
   'use strict';
-  var FW = { brand: 4, flavor: 3, type: 1.5, size: 1, notes: 1, section: 0.8, shelf: 0.5 };
+  var FW = { brand: 4, flavor: 3, code: 3, type: 1.5, size: 1, notes: 1, section: 0.8, shelf: 0.5 };
 
   function norm(s) {
     s = String(s == null ? '' : s).toLowerCase();

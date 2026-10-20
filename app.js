@@ -27,7 +27,7 @@
   }
   function mk(o) {
     var it = {
-      id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size), price: norm(o.price),
+      id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size), price: norm(o.price), qty: norm(o.qty), code: norm(o.code),
       section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0,
       places: (Array.isArray(o.places) ? o.places : []).map(function (p) { return { m: norm(p && p.m), section: norm(p && p.section), shelf: norm(p && p.shelf) }; }).filter(function (p) { return p.m && (p.section || p.shelf); })
     };
@@ -36,10 +36,16 @@
   function loadLocal() {
     try { return (JSON.parse(localStorage.getItem(LS) || '[]') || []).map(mk); } catch (e) { return []; }
   }
+  function rawOf(i) {
+    return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, qty: i.qty, code: i.code, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt, places: i.places && i.places.length ? i.places : undefined };
+  }
+  var TRASH = 'shelf-finder-trash-v1';
+  function trashList() { try { return JSON.parse(localStorage.getItem(TRASH) || '[]') || []; } catch (e) { return []; } }
+  function trashSet(l) { try { localStorage.setItem(TRASH, JSON.stringify(l.slice(0, 30))); } catch (e) {} }
   function saveLocal() {
     try {
       localStorage.setItem(LS, JSON.stringify(items.map(function (i) {
-        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt, places: i.places && i.places.length ? i.places : undefined };
+        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, qty: i.qty, code: i.code, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt, places: i.places && i.places.length ? i.places : undefined };
       })));
       return true;
     } catch (e) { return false; }
@@ -78,11 +84,19 @@
     limit = 60;
   }
   function hl(text) { return window.ShelfSearch.highlight(text, tokens, esc); }
-  var noSpot = false;
+  var noSpot = false, stockF = '';
+  var LOWKEY = 'shelf-finder-low-v1';
+  function lowAt() { try { var v = parseInt(localStorage.getItem(LOWKEY), 10); return v >= 0 ? v : 2; } catch (e) { return 2; } }
+  function qtyNum(it) { return /^-?\d+$/.test(String(it.qty || '').trim()) ? parseInt(it.qty, 10) : null; }
+  function stockState(it) { var n = qtyNum(it); if (n === null) return ''; return n <= 0 ? 'out' : (n <= lowAt() ? 'low' : 'ok'); }
+  function hasOtherPlace(it) { return (it.places || []).some(function (p) { return p.section || p.shelf; }); }
+  function needsRestock(it) { var st = stockState(it); return hasOtherPlace(it) && (!it.section || st === 'out' || st === 'low'); }
   function filtered() {
     var pool = items.filter(function (it) {
       if (typeF && it.type.toLowerCase() !== typeF) return false;
       if (noSpot && (it.section || it.shelf || it.places.length)) return false;
+      if (stockF === 'low' && !(stockState(it) === 'out' || stockState(it) === 'low')) return false;
+      if (stockF === 'restock' && !needsRestock(it)) return false;
       return true;
     });
     if (tokens.length) return window.ShelfSearch.run(pool, q).map(function (r) { return r.it; });
@@ -109,13 +123,18 @@
     });
     var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
     if (typeF && !counts[typeF]) typeF = '';
+    if (stockF === 'low' && !items.some(function (i) { var st = stockState(i); return st === 'out' || st === 'low'; })) stockF = '';
+    if (stockF === 'restock' && !items.some(needsRestock)) stockF = '';
     var h = '';
     if (keys.length) {
       var ns = items.filter(function (i) { return !i.section && !i.shelf && !i.places.length; }).length;
-      h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF && !noSpot) + '">All <span>' + items.length + '</span></button>';
+      h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF && !noSpot && !stockF) + '">All <span>' + items.length + '</span></button>';
       if (ns) h += '<button class="chip" type="button" data-nospot="1" aria-pressed="' + noSpot + '">No spot yet <span>' + ns + '</span></button>';
+      var nl = items.filter(function (i) { var st = stockState(i); return st === 'out' || st === 'low'; }).length, nr = items.filter(needsRestock).length;
+      if (nl) h += '<button class="chip" type="button" data-stock="low" aria-pressed="' + (stockF === 'low') + '">Low or out <span>' + nl + '</span></button>';
+      if (nr) h += '<button class="chip" type="button" data-stock="restock" aria-pressed="' + (stockF === 'restock') + '">Restock <span>' + nr + '</span></button>';
       keys.forEach(function (k) {
-        h += '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (typeF === k && !noSpot) + '">' + esc(labels[k]) + ' <span>' + counts[k] + '</span></button>';
+        h += '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (typeF === k && !noSpot && !stockF) + '">' + esc(labels[k]) + ' <span>' + counts[k] + '</span></button>';
       });
     }
     $('#chips').innerHTML = h;
@@ -135,6 +154,11 @@
     var t = String(p || '').replace(/[$,\s]/g, '');
     if (!/^\d+(\.\d+)?$/.test(t) || !parseFloat(t)) return '';
     return '$' + parseFloat(t).toFixed(2);
+  }
+  function qtyBadge(it) {
+    var st = stockState(it), n = qtyNum(it);
+    if (!st) return '';
+    return '<span class="qty ' + st + '">' + (st === 'out' ? 'Out' : st === 'low' ? 'Low · ' + n : 'Qty ' + n) + '</span>';
   }
   function mapLabel(id) {
     var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
@@ -190,7 +214,7 @@
         (it.notes ? '<p class="notes">' + hl(it.notes) + '</p>' : '') +
         (xp ? '<div class="places">' + xp + '</div>' : '') +
         '</div>' + loc + '</div>' +
-        '<div class="actions">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
+        '<div class="actions"><span class="lft">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + qtyBadge(it) + '</span>' + (needsRestock(it) ? '<button class="link" type="button" data-act="restock">Restocked</button>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
         '</li>';
     }).join('');
     if (res.length > shown.length) {
@@ -223,11 +247,37 @@
         rows.map(function (i) {
           return '<li data-id="' + esc(i.id) + '"><span class="sshelf">' + esc(i.shelf || '—') + '</span><span class="sbody"><b>' + esc(i.brand) + '</b>' +
             (i.flavor ? ' ' + esc(i.flavor) : '') + (i.size ? ' <small>' + esc(i.size) + '</small>' : '') + '</span><button class="link" type="button" data-act="edit">Edit</button></li>';
-        }).join('') + '</ul></details>';
+        }).join('') + '</ul><div class="secfoot"><button class="link" type="button" data-print="' + esc(k) + '">Print this list</button></div></details>';
     }).join('');
   }
 
+  function renderTrash() {
+    var host = $('#trashList'); if (!host) return;
+    var l = trashList();
+    host.innerHTML = l.length ? l.map(function (e, i) {
+      var d = new Date(e.t), when = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return '<div class="bkrow"><span><b>' + esc(e.it.brand + (e.it.flavor ? ' ' + e.it.flavor : '')) + '</b><small>Deleted ' + esc(when) + '</small></span><button class="link" type="button" data-untrash="' + i + '">Restore</button></div>';
+    }).join('') : '<p class="hint">Bottles you delete wait here, so a slip is easy to undo. The last 30 are kept.</p>';
+  }
+  function untrash(i) {
+    var l = trashList(), e = l[i];
+    if (!e) return;
+    l.splice(i, 1); trashSet(l);
+    var it = mk(e.it);
+    if (!items.some(function (x) { return x.id === it.id; })) { try { save(it); } catch (err) { toast('Could not restore. This phone is out of space.'); return; } }
+    renderTrash();
+    toast('Restored ' + it.brand);
+  }
+  function toastAct(msg, label, fn) {
+    var t = $('#toast');
+    t.innerHTML = esc(msg) + ' <button type="button" class="tbtn">' + esc(label) + '</button>';
+    t.hidden = false;
+    t.querySelector('.tbtn').addEventListener('click', function () { clearTimeout(toastTimer); t.hidden = true; fn(); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 7000);
+  }
   function renderAll() {
+    renderTrash();
     renderHero();
     renderChips();
     renderList();
@@ -245,7 +295,7 @@
 
   /* Add / edit sheet */
   var F = {};
-  ['brand', 'flavor', 'type', 'size', 'price', 'section', 'shelf', 'notes'].forEach(function (k) { F[k] = $('#f-' + k); });
+  ['brand', 'flavor', 'type', 'size', 'price', 'qty', 'code', 'section', 'shelf', 'notes'].forEach(function (k) { F[k] = $('#f-' + k); });
   function openSheet(it, pre) {
     editing = it ? it.id : null;
     var v = it || pre || {};
@@ -274,7 +324,7 @@
     var err = $('#formErr');
     if (!brand) { err.textContent = 'Enter the brand name so this bottle can be found.'; err.hidden = false; F.brand.focus(); return; }
     var it = mk({
-      id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value, price: F.price.value,
+      id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value, price: F.price.value, qty: F.qty.value, code: F.code.value,
       section: F.section.value, shelf: F.shelf.value, notes: F.notes.value,
       places: Array.prototype.map.call(document.querySelectorAll('#placesHost .placerow'), function (r) {
         return { m: r.getAttribute('data-pm'), section: r.querySelector('[data-ps]').value, shelf: r.querySelector('[data-pf]').value };
@@ -308,17 +358,74 @@
     return out.map(function (s) { return s.trim(); });
   }
   function dupKey(o) { return [o.brand, o.flavor, o.size].map(function (s) { return norm(s).toLowerCase(); }).join('|'); }
+  /* Refresh mode: match a column to bottles already listed (by item code, brand or name) and update only price and quantity. */
+  var refreshHeader = false;
+  function importRows() {
+    var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (!lines.length) return [];
+    var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    return lines.map(function (l) { return parseLine(l, delim); });
+  }
+  function fillMapper() {
+    var box = $('#importMapBox'), on = $('#importUpdateOnly').checked;
+    box.hidden = !on;
+    if (!on) return;
+    var rows = importRows();
+    if (!rows.length) { box.innerHTML = '<p class="hint">Choose a file or paste your list first, then the columns show up here.</p>'; return; }
+    var hdr = rows[0], low = hdr.map(function (x) { return x.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
+    var known = ['code', 'upc', 'barcode', 'sku', 'item code', 'item number', 'item no', 'item', 'name', 'description', 'brand', 'product', 'price', 'retail', 'retail price', 'qty', 'quantity', 'on hand', 'stock', 'qoh'];
+    refreshHeader = low.some(function (x) { return known.indexOf(x) >= 0; });
+    var labels = hdr.map(function (x, i) { return refreshHeader ? (x || 'Column ' + (i + 1)) : 'Column ' + (i + 1) + (x ? ' (' + x.slice(0, 14) + ')' : ''); });
+    function guess(list) { for (var k = 0; k < list.length; k++) { var ix = low.indexOf(list[k]); if (ix >= 0) return ix; } return -1; }
+    var gm = guess(['code', 'upc', 'barcode', 'sku', 'item code', 'item number', 'item no', 'item', 'plu', 'name', 'description', 'brand', 'product']);
+    var gp = guess(['price', 'retail', 'retail price', 'unit price', 'sell price', 'selling price', 'srp']);
+    var gq = guess(['qty', 'quantity', 'on hand', 'onhand', 'qoh', 'stock', 'in stock', 'count']);
+    if (!refreshHeader) { gm = 0; }
+    function sel(id, label, g, optional) {
+      return '<div class="field full"><label for="' + id + '">' + label + '</label><select id="' + id + '">' + (optional ? '<option value="-1">Do not change</option>' : '') + labels.map(function (t, i) { return '<option value="' + i + '"' + (i === g ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select></div>';
+    }
+    box.innerHTML = '<p class="hint">Say which column is which. A bottle is matched when this column equals its item code, brand or name.</p>' + sel('rmMatch', 'Match bottles by', gm, false) + sel('rmPrice', 'Price column', gp, true) + sel('rmQty', 'Quantity column', gq, true);
+  }
+  function normKey(v) { return String(v == null ? '' : v).trim().toLowerCase().replace(/^0+(?=\d)/, ''); }
+  function runRefresh() {
+    var msg = $('#importMsg'), rows = importRows();
+    if (!rows.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
+    var mi = parseInt($('#rmMatch').value, 10), pi = parseInt($('#rmPrice').value, 10), qi = parseInt($('#rmQty').value, 10);
+    if (pi < 0 && qi < 0) { msg.textContent = 'Pick a price column, a quantity column, or both.'; msg.hidden = false; return; }
+    var idx = {};
+    items.forEach(function (it) { [it.code, it.brand, it.flavor].forEach(function (v) { var k = normKey(v); if (!k) return; (idx[k] = idx[k] || []); if (idx[k].indexOf(it) < 0) idx[k].push(it); }); });
+    if (window.ShelfBackup) window.ShelfBackup.snapshot('Before refreshing prices and quantities');
+    var prev = items.map(function (i) { return rawOf(i); }), upd = 0, same = 0, miss = 0, start = refreshHeader ? 1 : 0;
+    for (var r = start; r < rows.length; r++) {
+      var row = rows[r], key = normKey(row[mi]);
+      if (!key) continue;
+      var hit = idx[key];
+      if (!hit) { miss++; continue; }
+      var np = pi >= 0 ? norm(row[pi]).replace(/^\$/, '') : '', nq = qi >= 0 ? norm(row[qi]).replace(/\.0+$/, '') : '';
+      hit.forEach(function (it) {
+        var ch = false;
+        if (np && np !== it.price) { it.price = np; ch = true; }
+        if (nq && nq !== it.qty) { it.qty = nq; ch = true; }
+        if (ch) { it.updatedAt = Date.now(); upd++; } else same++;
+      });
+    }
+    if (upd && !saveLocal()) { items = prev.map(mk); msg.textContent = 'This phone has no room left to save the list.'; msg.hidden = false; return; }
+    renderAll();
+    msg.textContent = 'Updated ' + upd + ' bottle' + (upd === 1 ? '' : 's') + (same ? ', ' + same + ' already up to date' : '') + (miss ? ', ' + miss + ' rows not found in your list' : '') + '.';
+    msg.hidden = false;
+  }
   function runImport() {
+    if ($('#importUpdateOnly').checked) { runRefresh(); return; }
     var msg = $('#importMsg');
     var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
     if (!lines.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
     var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
-    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], price: ['price', 'retail', 'retail price', 'unit price', 'sell price', 'selling price', 'srp', 'cost'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
-    var cols = { brand: 0, flavor: 1, type: 2, size: 3, price: -1, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
+    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], qty: ['qty', 'quantity', 'on hand', 'onhand', 'qoh', 'stock', 'in stock', 'count'], code: ['code', 'upc', 'barcode', 'sku', 'item code', 'item number', 'item no', 'plu', 'ean'], price: ['price', 'retail', 'retail price', 'unit price', 'sell price', 'selling price', 'srp', 'cost'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
+    var cols = { brand: 0, flavor: 1, type: 2, size: 3, price: -1, qty: -1, code: -1, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
     var h0 = parseLine(lines[0], delim).map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
     var map2 = {}, hits = 0;
     Object.keys(ALIASES).forEach(function (f) { var ix = -1; ALIASES[f].forEach(function (al) { if (ix < 0) ix = h0.indexOf(al); }); if (ix >= 0) { map2[f] = ix; hits++; } });
-    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, price: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
+    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, price: -1, qty: -1, code: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
     var byKey = {};
     items.forEach(function (i) { byKey[dupKey(i)] = i; });
     var added = 0, updated = 0, same = 0, fresh = [];
@@ -327,11 +434,11 @@
       var c = parseLine(l, delim);
       var g = function (f) { return cols[f] >= 0 && cols[f] < c.length ? c[cols[f]] : ''; };
       if (!g('brand')) return;
-      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), price: g('price'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
+      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), price: g('price'), qty: g('qty'), code: g('code'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
       var k = dupKey(it), old = byKey[k];
       if (old) {
         var ch = false;
-        ['type', 'price', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
+        ['type', 'price', 'qty', 'code', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
         if (ch) { old.updatedAt = Date.now(); updated++; } else same++;
         return;
       }
@@ -357,8 +464,8 @@
   function csvCell(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   function exportCsv() {
     if (!items.length) { toast('Nothing to export yet.'); return; }
-    var rows = [['Brand', 'Flavor', 'Type', 'Size', 'Price', 'Section', 'Shelf', 'Notes']].concat(
-      items.slice().sort(function (a, b) { return cmp(a.brand, b.brand); }).map(function (i) { return [i.brand, i.flavor, i.type, i.size, i.price, i.section, i.shelf, i.notes]; })
+    var rows = [['Brand', 'Flavor', 'Type', 'Size', 'Price', 'Qty', 'Code', 'Section', 'Shelf', 'Notes']].concat(
+      items.slice().sort(function (a, b) { return cmp(a.brand, b.brand); }).map(function (i) { return [i.brand, i.flavor, i.type, i.size, i.price, i.qty, i.code, i.section, i.shelf, i.notes]; })
     );
     var text = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
     var blob = new Blob([text], { type: 'text/csv' });
@@ -381,10 +488,11 @@
   /* Events */
   $('#search').addEventListener('input', function (e) { setQuery(e.target.value); renderList(); });
   $('#chips').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-type],[data-nospot]');
+    var b = e.target.closest('[data-type],[data-nospot],[data-stock]');
     if (!b) return;
-    if (b.hasAttribute('data-nospot')) { noSpot = !noSpot; typeF = ''; }
-    else { typeF = b.getAttribute('data-type'); noSpot = false; }
+    if (b.hasAttribute('data-stock')) { var sv = b.getAttribute('data-stock'); stockF = stockF === sv ? '' : sv; typeF = ''; noSpot = false; }
+    else if (b.hasAttribute('data-nospot')) { noSpot = !noSpot; typeF = ''; stockF = ''; }
+    else { typeF = b.getAttribute('data-type'); noSpot = false; stockF = ''; }
     limit = 60;
     renderChips();
     renderList();
@@ -430,6 +538,7 @@
       return;
     }
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
+    if (b.getAttribute('data-act') === 'restock') { openSheet(it); setTimeout(function () { F.qty.focus(); F.qty.select(); }, 60); return; }
     if (b.getAttribute('data-act') === 'map') { window.ShelfMap.show(it); return; }
     if (b.getAttribute('data-armed') !== '1') {
       b.setAttribute('data-armed', '1');
@@ -437,7 +546,11 @@
       setTimeout(function () { if (b.isConnected) { b.removeAttribute('data-armed'); b.textContent = 'Delete'; } }, 3000);
       return;
     }
-    try { removeItem(id); toast('Deleted ' + it.brand); } catch (err) { toast('Could not delete. Try again.'); }
+    try {
+      var tl = trashList(); tl.unshift({ t: Date.now(), it: rawOf(it) }); trashSet(tl);
+      removeItem(id);
+      toastAct('Deleted ' + it.brand, 'Undo', function () { var j = trashList().findIndex(function (e) { return e.it.id === id; }); if (j >= 0) untrash(j); });
+    } catch (err) { toast('Could not delete. Try again.'); }
   });
   F.section.addEventListener('input', syncShelfPick);
   F.shelf.addEventListener('input', syncShelfPick);
@@ -451,12 +564,76 @@
   $('#saveNextBtn').addEventListener('click', function () { submit(true); });
   $('#cancelBtn').addEventListener('click', closeSheet);
   $('#sheetScrim').addEventListener('mousedown', function (e) { if (e.target === this) closeSheet(); });
+  /* Printable checklist of one section, shelf by shelf, for checking the real shelf against the list. */
+  function openPrint(k) {
+    var rows = items.filter(function (i) { return i.section.toLowerCase() === k; }).sort(function (a, b) { return cmp(a.shelf, b.shelf) || cmp(a.brand, b.brand) || cmp(a.flavor, b.flavor); });
+    if (!rows.length) return;
+    var name = rows[0].section || 'No spot yet', ov = document.createElement('div');
+    ov.className = 'printov';
+    var cur = null, body = '';
+    rows.forEach(function (i) {
+      var sh = i.shelf === '0' ? 'On top' : (i.shelf ? 'Shelf ' + i.shelf : 'No shelf');
+      if (sh !== cur) { cur = sh; body += '<tr class="ph"><td colspan="4">' + esc(sh) + '</td></tr>'; }
+      body += '<tr><td class="pc">☐</td><td>' + esc(i.brand) + (i.flavor ? ' ' + esc(i.flavor) : '') + (i.size ? ' <small>' + esc(i.size) + '</small>' : '') + '</td><td>' + esc(i.code || '') + '</td><td class="pq">' + esc(i.qty || '') + '</td></tr>';
+    });
+    ov.innerHTML = '<div class="noprint pbar"><button class="btn" type="button" data-pgo>Print</button><button class="btn ghost" type="button" data-pclose>Close</button></div>' +
+      '<h2>' + esc(name) + '</h2><p class="hint">' + rows.length + ' bottles · ' + esc(new Date().toLocaleDateString()) + '</p>' +
+      '<table><thead><tr><th></th><th>Bottle</th><th>Code</th><th>Qty</th></tr></thead><tbody>' + body + '</tbody></table>';
+    ov.addEventListener('click', function (e) {
+      if (e.target.closest('[data-pclose]')) ov.remove();
+      else if (e.target.closest('[data-pgo]')) { try { window.print(); } catch (err) {} }
+    });
+    document.body.appendChild(ov);
+  }
+  $('#browseHost').addEventListener('click', function (e) { var b = e.target.closest('[data-print]'); if (b) { e.preventDefault(); openPrint(b.getAttribute('data-print')); } });
+  /* Barcode scan: a known code shows that bottle; a new code is linked to a bottle once, then works every time. */
+  var scanCode = '';
+  function setSearch(v) { var el = $('#search'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
+  function afterScan(code) {
+    var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
+    if (hit.length) { setSearch(code); toast(hit.length === 1 ? 'Found ' + hit[0].brand + (hit[0].flavor ? ' ' + hit[0].flavor : '') : hit.length + ' bottles with that code'); return; }
+    scanCode = code;
+    $('#linkMsg').textContent = 'The barcode ' + code + ' is not linked to a bottle yet. Search for the bottle once and tap it, and from then on scanning finds it.';
+    $('#linkSearch').value = ''; $('#linkList').innerHTML = '';
+    $('#linkScrim').hidden = false;
+    setTimeout(function () { $('#linkSearch').focus(); }, 40);
+  }
+  function renderLink() {
+    var qv = $('#linkSearch').value, host = $('#linkList');
+    if (!window.ShelfSearch.tokens(qv).length) { host.innerHTML = ''; return; }
+    var res = window.ShelfSearch.run(items, qv).slice(0, 8).map(function (r) { return r.it; });
+    host.innerHTML = res.length ? res.map(function (it) {
+      return '<button class="linkrow" type="button" data-link="' + esc(it.id) + '"><b>' + esc(it.brand) + '</b>' + (it.flavor ? ' ' + esc(it.flavor) : '') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + (it.code ? ' <small>(has code ' + esc(it.code) + ')</small>' : '') + '</button>';
+    }).join('') : '<p class="hint">Nothing matches. Try fewer words, or add it as a new bottle.</p>';
+  }
+  $('#scanBtn').addEventListener('click', function () { if (window.ShelfScan) window.ShelfScan.open(afterScan); });
+  $('#scanFormBtn').addEventListener('click', function () { if (window.ShelfScan) window.ShelfScan.open(function (c) { F.code.value = c; }); });
+  $('#linkSearch').addEventListener('input', renderLink);
+  $('#linkClose').addEventListener('click', function () { $('#linkScrim').hidden = true; });
+  $('#linkAdd').addEventListener('click', function () { $('#linkScrim').hidden = true; openSheet(null, Object.assign({}, carry, { code: scanCode })); });
+  $('#linkList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-link]'); if (!b) return;
+    var it = items.filter(function (x) { return x.id === b.getAttribute('data-link'); })[0]; if (!it) return;
+    var raw = rawOf(it); raw.code = scanCode; var upd = mk(raw);
+    try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
+    $('#linkScrim').hidden = true;
+    setSearch(scanCode);
+    toast('Linked to ' + upd.brand);
+  });
   $('#importBtn').addEventListener('click', openImport);
+  $('#importUpdateOnly').addEventListener('change', fillMapper);
+  $('#importText').addEventListener('input', function () { if ($('#importUpdateOnly').checked) fillMapper(); });
+  $('#trashList').addEventListener('click', function (e) { var b = e.target.closest('[data-untrash]'); if (b) untrash(parseInt(b.getAttribute('data-untrash'), 10)); });
+  (function () {
+    var li = $('#lowAt'); if (!li) return;
+    li.value = lowAt();
+    li.addEventListener('change', function () { var v = parseInt(li.value, 10); try { localStorage.setItem(LOWKEY, String(v >= 0 ? v : 2)); } catch (e) {} li.value = lowAt(); renderAll(); });
+  })();
   $('#importFile').addEventListener('change', function (e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
     var r = new FileReader();
-    r.onload = function () { $('#importText').value = String(r.result || ''); };
+    r.onload = function () { $('#importText').value = String(r.result || ''); fillMapper(); };
     r.readAsText(f);
   });
   $('#importSheet').addEventListener('submit', function (e) { e.preventDefault(); runImport(); });
@@ -505,9 +682,9 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v51';
+  var APP_VERSION = 'v52';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
-  var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
+  var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
      worker and its caches, then reload. (Just unregistering is not enough: the browser would still
      hand back its own saved copies of the scripts for up to ten minutes.) */
