@@ -28,7 +28,7 @@
     </div>
     <div class="searchbar">
       <div class="searchrow">
-        <input class="search" id="search" type="search" placeholder="Search brand, flavor, type, aisle" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search bottles">
+        <input class="search" id="search" type="search" placeholder="Search brand, flavor, type, description" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search bottles">
         <button class="camfab" id="photoBtn" type="button" aria-label="Find by photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
       </div>
       <div class="chips" id="chips" role="group" aria-label="Filter by type"></div>
@@ -125,8 +125,9 @@
       <div class="field"><label for="f-type">Type</label><input id="f-type" list="dl-types" placeholder="Vodka"></div>
       <div class="field"><label for="f-size">Size</label><input id="f-size" list="dl-sizes" placeholder="750ml"></div>
       <div class="field"><label for="f-section">Aisle or section</label><input id="f-section" list="dl-sections" placeholder="Aisle 3"></div>
-      <div class="field"><label for="f-shelf">Shelf</label><input id="f-shelf" placeholder="2 from top"></div>
-      <div class="field full"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="Back row, locked case"></textarea></div>
+      <div class="field"><label for="f-shelf">Shelf</label><input id="f-shelf" placeholder="2"></div>
+      <div class="field full" id="shelfPick" hidden></div>
+      <div class="field full"><label for="f-notes">Description (searchable)</label><textarea id="f-notes" placeholder="Smoky, sweet, cheap rail whiskey, also called Beam"></textarea></div>
     </div>
     <p class="err" id="formErr" hidden></p>
     <div class="sheet-actions">
@@ -196,6 +197,7 @@
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<script src="search.js"></script>
 <script src="app.js"></script>
 <script src="photo.js"></script>
 <script src="map.js"></script>

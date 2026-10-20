@@ -30,8 +30,7 @@
       id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size),
       section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0
     };
-    it._h = [it.brand, it.flavor, it.type, it.size, it.section, it.shelf, it.notes].join(' ').toLowerCase();
-    return it;
+    return window.ShelfSearch.prepare(it);
   }
   function loadLocal() {
     try { return (JSON.parse(localStorage.getItem(LS) || '[]') || []).map(mk); } catch (e) { return []; }
@@ -74,28 +73,19 @@
   /* Rendering */
   function setQuery(v) {
     q = v;
-    tokens = v.toLowerCase().split(/\s+/).filter(Boolean);
-    re = tokens.length ? new RegExp('(' + tokens.map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')', 'gi') : null;
+    tokens = window.ShelfSearch.tokens(v);
     limit = 60;
   }
-  function hl(text) {
-    text = String(text == null ? '' : text);
-    if (!re) return esc(text);
-    var out = '', last = 0, m;
-    re.lastIndex = 0;
-    while ((m = re.exec(text))) {
-      if (!m[0]) break;
-      out += esc(text.slice(last, m.index)) + '<mark>' + esc(m[0]) + '</mark>';
-      last = m.index + m[0].length;
-    }
-    return out + esc(text.slice(last));
-  }
+  function hl(text) { return window.ShelfSearch.highlight(text, tokens, esc); }
+  var noSpot = false;
   function filtered() {
-    return items.filter(function (it) {
+    var pool = items.filter(function (it) {
       if (typeF && it.type.toLowerCase() !== typeF) return false;
-      for (var i = 0; i < tokens.length; i++) if (it._h.indexOf(tokens[i]) < 0) return false;
+      if (noSpot && (it.section || it.shelf)) return false;
       return true;
-    }).sort(function (a, b) { return cmp(a.brand, b.brand) || cmp(a.flavor, b.flavor); });
+    });
+    if (tokens.length) return window.ShelfSearch.run(pool, q).map(function (r) { return r.it; });
+    return pool.sort(function (a, b) { return cmp(a.brand, b.brand) || cmp(a.flavor, b.flavor); });
   }
 
   function renderHero() {
@@ -120,9 +110,11 @@
     if (typeF && !counts[typeF]) typeF = '';
     var h = '';
     if (keys.length) {
-      h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF) + '">All <span>' + items.length + '</span></button>';
+      var ns = items.filter(function (i) { return !i.section && !i.shelf; }).length;
+      h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF && !noSpot) + '">All <span>' + items.length + '</span></button>';
+      if (ns) h += '<button class="chip" type="button" data-nospot="1" aria-pressed="' + noSpot + '">No spot yet <span>' + ns + '</span></button>';
       keys.forEach(function (k) {
-        h += '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (typeF === k) + '">' + esc(labels[k]) + ' <span>' + counts[k] + '</span></button>';
+        h += '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (typeF === k && !noSpot) + '">' + esc(labels[k]) + ' <span>' + counts[k] + '</span></button>';
       });
     }
     $('#chips').innerHTML = h;
@@ -134,6 +126,7 @@
     $('#dl-types').innerHTML = Object.keys(tl).map(function (k) { return '<option value="' + esc(tl[k]) + '">'; }).join('');
     var secs = {};
     items.forEach(function (i) { if (i.section) secs[i.section.toLowerCase()] = i.section; });
+    if (window.ShelfMap && window.ShelfMap.zoneNames) window.ShelfMap.zoneNames().forEach(function (n) { secs[n.toLowerCase()] = n; });
     $('#dl-sections').innerHTML = Object.keys(secs).sort(cmp).map(function (k) { return '<option value="' + esc(secs[k]) + '">'; }).join('');
   }
 
@@ -149,8 +142,10 @@
     }
     if (!res.length) {
       list.innerHTML = '';
-      empty.innerHTML = '<div class="glass empty"><h2>No match</h2><p>' + (q ? 'Nothing found for “' + esc(q) + '”.' : 'Nothing in this type yet.') + ' Try fewer words or check the spelling.</p>' +
-        (q ? '<div class="btns"><button class="btn" type="button" data-open="addq">Add “' + esc(q) + '” as a new bottle</button></div>' : '') + '</div>';
+      var dym = q && !typeF && !noSpot ? window.ShelfSearch.didYouMean(items, q) : '';
+      empty.innerHTML = '<div class="glass empty"><h2>No match</h2><p>' + (q ? 'Nothing found for “' + esc(q) + '”.' : 'Nothing in this type yet.') + ' Every word has to start a word in the bottle’s name, type or description.</p>' +
+        (dym ? '<div class="btns"><button class="btn" type="button" data-open="dym" data-q="' + esc(dym) + '">Did you mean “' + esc(dym) + '”?</button></div>' : '') +
+        (q ? '<div class="btns"><button class="btn ghost" type="button" data-open="addq">Add “' + esc(q) + '” as a new bottle</button></div>' : '') + '</div>';
       return;
     }
     var shown = res.slice(0, limit);
@@ -229,7 +224,17 @@
     $('#formErr').hidden = true;
     $('#saveNextBtn').hidden = !!it;
     $('#sheetScrim').hidden = false;
-    setTimeout(function () { F.brand.focus(); }, 30);
+    syncShelfPick();
+    if (!it) setTimeout(function () { F.brand.focus(); }, 30);
+    else if (!it.section) setTimeout(function () { F.section.focus(); }, 30);
+  }
+  function syncShelfPick() {
+    var host = $('#shelfPick'), info = window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(F.section.value) : null;
+    if (!info || info.shelves < 2) { host.innerHTML = ''; host.hidden = true; return; }
+    var cur = String(F.shelf.value || '').trim(), h = '';
+    for (var i = 1; i <= info.shelves; i++) h += '<button class="chip" type="button" data-shelf="' + i + '" aria-pressed="' + (cur === String(i)) + '">' + i + '</button>';
+    host.innerHTML = '<span class="hint">Shelf (1 is the ' + (info.topFirst ? 'top' : 'bottom') + ')</span><div class="chips">' + h + '</div>';
+    host.hidden = false;
   }
   function closeSheet() { $('#sheetScrim').hidden = true; editing = null; }
 
@@ -273,12 +278,12 @@
     var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
     if (!lines.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
     var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
-    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'] };
-    var cols = { brand: 0, flavor: 1, type: 2, size: 3, section: 4, shelf: 5 }, hasHeader = false;
+    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
+    var cols = { brand: 0, flavor: 1, type: 2, size: 3, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
     var h0 = parseLine(lines[0], delim).map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
     var map2 = {}, hits = 0;
     Object.keys(ALIASES).forEach(function (f) { var ix = -1; ALIASES[f].forEach(function (al) { if (ix < 0) ix = h0.indexOf(al); }); if (ix >= 0) { map2[f] = ix; hits++; } });
-    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, section: -1, shelf: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
+    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
     var byKey = {};
     items.forEach(function (i) { byKey[dupKey(i)] = i; });
     var added = 0, updated = 0, same = 0, fresh = [];
@@ -287,11 +292,11 @@
       var c = parseLine(l, delim);
       var g = function (f) { return cols[f] >= 0 && cols[f] < c.length ? c[cols[f]] : ''; };
       if (!g('brand')) return;
-      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), section: g('section'), shelf: g('shelf'), updatedAt: Date.now() });
+      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
       var k = dupKey(it), old = byKey[k];
       if (old) {
         var ch = false;
-        ['type', 'section', 'shelf'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
+        ['type', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
         if (ch) { old.updatedAt = Date.now(); updated++; } else same++;
         return;
       }
@@ -340,9 +345,10 @@
   /* Events */
   $('#search').addEventListener('input', function (e) { setQuery(e.target.value); renderList(); });
   $('#chips').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-type]');
+    var b = e.target.closest('[data-type],[data-nospot]');
     if (!b) return;
-    typeF = b.getAttribute('data-type');
+    if (b.hasAttribute('data-nospot')) { noSpot = !noSpot; typeF = ''; }
+    else { typeF = b.getAttribute('data-type'); noSpot = false; }
     limit = 60;
     renderChips();
     renderList();
@@ -359,13 +365,14 @@
     if (w === 'add') openSheet(null, carry);
     else if (w === 'addq') openSheet(null, Object.assign({}, carry, { brand: q }));
     else if (w === 'import') openImport();
+    else if (w === 'dym') { var s = b.getAttribute('data-q'); $('#search').value = s; setQuery(s); renderList(); }
   }
   $('#emptyHost').addEventListener('click', openFromEmpty);
   $('#browseHost').addEventListener('click', function (e) {
     openFromEmpty(e);
-    var b = e.target.closest('[data-act="edit"]');
-    if (!b) return;
-    var it = items.find(function (x) { return x.id === b.closest('li').getAttribute('data-id'); });
+    var li = e.target.closest('li[data-id]');
+    if (!li || e.target.closest('summary')) return;
+    var it = items.find(function (x) { return x.id === li.getAttribute('data-id'); });
     if (it) openSheet(it);
   });
   $('#browseHost').addEventListener('toggle', function (e) {
@@ -374,10 +381,12 @@
   }, true);
   $('#list').addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]');
-    if (!b) return;
-    var id = b.closest('.item').getAttribute('data-id');
+    var card = e.target.closest('.item');
+    if (!card) return;
+    var id = card.getAttribute('data-id');
     var it = items.find(function (x) { return x.id === id; });
     if (!it) return;
+    if (!b) { openSheet(it); return; }
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
     if (b.getAttribute('data-act') === 'map') { window.ShelfMap.show(it); return; }
     if (b.getAttribute('data-armed') !== '1') {
@@ -387,6 +396,14 @@
       return;
     }
     try { removeItem(id); toast('Deleted ' + it.brand); } catch (err) { toast('Could not delete. Try again.'); }
+  });
+  F.section.addEventListener('input', syncShelfPick);
+  F.shelf.addEventListener('input', syncShelfPick);
+  $('#shelfPick').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-shelf]');
+    if (!b) return;
+    F.shelf.value = b.getAttribute('data-shelf');
+    syncShelfPick();
   });
   $('#sheet').addEventListener('submit', function (e) { e.preventDefault(); submit(false); });
   $('#saveNextBtn').addEventListener('click', function () { submit(true); });
@@ -427,7 +444,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v9';
+  var APP_VERSION = 'v10';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   $('#updateBtn').addEventListener('click', function () {
     var b = this;

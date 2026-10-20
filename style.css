@@ -417,3 +417,9 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 #zKind button { flex: 1; }
 #mapUnplaced:empty { display: none; }
 #mapUnplaced .chip { margin: 2px 2px 2px 0; }
+
+/* Tap a bottle to set its spot */
+.item .row, .srows li { cursor: pointer; }
+.srows li:active, .item:active { opacity: 0.85; }
+#shelfPick { display: grid; gap: 6px; }
+#shelfPick .chips { flex-wrap: wrap; overflow: visible; }

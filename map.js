@@ -426,10 +426,9 @@
 
   /* Search on the map screen */
   function suggest() {
-    var q = $('#mapSearch').value.toLowerCase().split(/\s+/).filter(Boolean), host = $('#mapSuggest');
-    if (!q.length) { host.innerHTML = ''; return; }
-    var res = items().filter(function (it) { return q.every(function (t) { return it._h.indexOf(t) >= 0; }); })
-      .sort(function (a, b) { return a.brand.localeCompare(b.brand) || a.flavor.localeCompare(b.flavor); }).slice(0, 6);
+    var qv = $('#mapSearch').value, host = $('#mapSuggest');
+    if (!window.ShelfSearch.tokens(qv).length) { host.innerHTML = ''; return; }
+    var res = window.ShelfSearch.run(items(), qv).map(function (r) { return r.it; }).slice(0, 6);
     host.innerHTML = res.length ? res.map(function (it) {
       return '<button class="chip" type="button" data-pick="' + esc(it.id) + '">' + esc(it.brand + (it.flavor ? ' ' + it.flavor : '')) + '</button>';
     }).join('') : '<span class="hint">Nothing matches. Try fewer words.</span>';
@@ -639,6 +638,11 @@
 
   root.ShelfMap = {
     has: function () { return !!(map && map.zones && map.zones.length); },
+    zoneNames: function () { return map && map.zones ? map.zones.map(function (z) { return z.name; }) : []; },
+    zoneInfo: function (name) {
+      var z = map && map.zones ? findZone(map.zones, name) : null;
+      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: map.topFirst !== false } : null;
+    },
     onShow: function () { refresh(); },
     show: function (it) {
       if (root.ShelfApp) root.ShelfApp.showTab('map');
