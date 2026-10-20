@@ -46,7 +46,7 @@
     state = { dead: false, onCode: onCode, done: false, opts: opts, lastCode: '', lastAt: 0 };
     var msg = $('#scanMsg');
     function found(code) {
-      if (!state || state.done || state.dead) return;
+      if (!state || state.done || state.dead || state.hold) return;
       code = String(code || '').replace(/\s+/g, '');
       if (!code) return;
       if (opts.continuous) {
@@ -70,6 +70,7 @@
       host.insertBefore(d, host.firstChild);
       if (opts.beep !== false) beep(r.cls === 'bad');
     }
+    state.addLog = addLog;
     function beep(bad) {
       try {
         if (navigator.vibrate) navigator.vibrate(bad ? [40, 40, 40] : 25);
@@ -133,5 +134,5 @@
     });
   }
 
-  root.ShelfScan = { open: open, close: stop };
+  root.ShelfScan = { open: open, close: stop, hold: function (b) { if (state) state.hold = !!b; }, log: function (r) { if (state && state.addLog) state.addLog(r); } };
 })(typeof window !== 'undefined' ? window : globalThis);

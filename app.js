@@ -629,6 +629,34 @@
     toast('Linked to ' + upd.brand);
   });
   /* Stock a shelf: pick a spot, scan bottles one after another, and each one is moved to that spot. */
+  /* Barcode lookup: the number is sent to public product databases and nothing else leaves the phone. */
+  function timedFetch(url) {
+    return new Promise(function (res, rej) {
+      var done = false, t = setTimeout(function () { if (!done) { done = true; rej(new Error('timeout')); } }, 4500);
+      fetch(url).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http')); }).then(function (j) { if (!done) { done = true; clearTimeout(t); res(j); } }, function (e) { if (!done) { done = true; clearTimeout(t); rej(e); } });
+    });
+  }
+  function sizeFrom(t) { var m = /(\d+(?:\.\d+)?)\s*(ml|l|liter|litre|oz|fl\.?\s*oz)\b/i.exec(t || ''); return m ? m[1] + m[2].toLowerCase().replace(/\s+/g, '') : ''; }
+  function lookupCode(code) {
+    var c = encodeURIComponent(code);
+    return timedFetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + c).then(function (j) {
+      var p = j && j.items && j.items[0]; if (!p || !p.title) throw new Error('none');
+      var name = String(p.title).trim(); if (p.brand && name.toLowerCase().indexOf(String(p.brand).toLowerCase()) < 0) name = p.brand + ' ' + name;
+      return { name: name, size: norm(p.size) || sizeFrom(name), type: '' };
+    }).catch(function () {
+      return timedFetch('https://world.openfoodfacts.org/api/v2/product/' + c + '.json?fields=product_name,brands,quantity').then(function (j) {
+        var p = j && j.product; if (!p || !p.product_name) throw new Error('none');
+        var name = String(p.product_name).trim(); if (p.brands && name.toLowerCase().indexOf(String(p.brands).split(',')[0].toLowerCase()) < 0) name = String(p.brands).split(',')[0].trim() + ' ' + name;
+        return { name: name, size: norm(p.quantity) || sizeFrom(name), type: '' };
+      });
+    }).catch(function () { return null; });
+  }
+  function popup(html, wire) {
+    var ov = document.createElement('div'); ov.className = 'popov';
+    ov.innerHTML = '<div class="popcard" role="dialog" aria-modal="true">' + html + '</div>';
+    document.body.appendChild(ov);
+    wire(ov, function () { ov.remove(); });
+  }
   var stockCtx = null;
   function placeAt(it, c) {
     var raw = rawOf(it);
@@ -661,11 +689,37 @@
     var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main');
     var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m) };
     if (!window.ShelfScan) return;
-    var unknown = [], placed = 0;
+    var unknown = [], placed = 0, skipped = {};
+    function stockUnknown(code, k) {
+      window.ShelfScan.hold(true);
+      function resume() { window.ShelfScan.hold(false); }
+      function cancel(close) { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); close(); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad' }); }
+      function create(info, close) {
+        var raw = { id: newId(), brand: info.name, size: info.size || '', type: info.type || '', code: code };
+        if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; } else raw.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
+        var it = mk(raw);
+        try { save(it); } catch (err) { toast('Could not save. This phone is out of space.'); close(); resume(); return; }
+        placed++; close(); resume();
+        window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; } catch (err) {} } });
+      }
+      popup('<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not in your list. Add it as a new bottle?</p><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>', function (ov, close) {
+        ov.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
+        ov.querySelector('[data-padd]').addEventListener('click', function () {
+          ov.querySelector('.popcard').innerHTML = '<h3>Looking it up</h3><p>Finding the name for <b>' + esc(code) + '</b>...</p>';
+          lookupCode(code).then(function (info) {
+            if (info) { create(info, close); return; }
+            ov.querySelector('.popcard').innerHTML = '<h3>No details found</h3><p>No product details exist online for <b>' + esc(code) + '</b>. Type the name once and the barcode is remembered.</p><input class="popin" id="popName" placeholder="Bottle name and size" autocomplete="off"><div class="popbtns"><button class="btn grow" data-psave type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+            var inp = ov.querySelector('#popName'); setTimeout(function () { inp.focus(); }, 40);
+            ov.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
+            ov.querySelector('[data-psave]').addEventListener('click', function () { var n = norm(inp.value); if (!n) { inp.focus(); return; } create({ name: n, size: sizeFrom(n) }, close); });
+          });
+        });
+      });
+    }
     $('#stockScrim').hidden = true;
     window.ShelfScan.open(function (code) {
       var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
-      if (!hit.length) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad' }; }
+      if (!hit.length) { if (skipped[k]) return null; stockUnknown(code, k); return null; }
       var it = hit[0], name = it.brand + (it.flavor ? ' ' + it.flavor : ''), w = whereAt(it, c);
       if (w.section.toLowerCase() === c.section.toLowerCase() && String(w.shelf) === String(c.shelf)) return { text: name + ' is already here' };
       var before = it, upd = placeAt(it, c);
@@ -744,7 +798,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v59';
+  var APP_VERSION = 'v60';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
