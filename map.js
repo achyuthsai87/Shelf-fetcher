@@ -914,6 +914,32 @@
     $('#zoneForm').addEventListener('submit', function (e) { e.preventDefault(); saveZone(); });
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
+    var bulkKind = 'cooler';
+    $('#bulkKind').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-bk]'); if (!b) return;
+      bulkKind = b.getAttribute('data-bk');
+      Array.prototype.forEach.call(document.querySelectorAll('#bulkKind [data-bk]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    });
+    $('#bulkApply').addEventListener('click', function () {
+      var raw = $('#bulkNames').value, names = [];
+      raw.split(/[,;\n]+/).forEach(function (t) {
+        t = t.trim(); if (!t) return;
+        var m = /^([A-Za-z]*)\s*(\d+)\s*[-–]\s*(?:[A-Za-z]*)\s*(\d+)$/.exec(t);
+        if (m && parseInt(m[3], 10) >= parseInt(m[2], 10) && parseInt(m[3], 10) - parseInt(m[2], 10) < 200) { for (var n = parseInt(m[2], 10); n <= parseInt(m[3], 10); n++) names.push(m[1] + n); }
+        else names.push(t);
+      });
+      if (!names.length) { toast('Type the box names first, like 1-17, FD.'); return; }
+      var byName = {}; map.zones.forEach(function (z) { byName[String(z.name).trim().toLowerCase()] = z; });
+      var hit = [], miss = [];
+      names.forEach(function (n) { var z = byName[n.toLowerCase()]; if (z) { if (hit.indexOf(z) < 0) hit.push(z); } else miss.push(n); });
+      if (!hit.length) { toast('No box with those names. Check the spelling.'); return; }
+      if (window.ShelfBackup) window.ShelfBackup.snapshot('Before changing many boxes');
+      hit.forEach(function (z) { z.kind = bulkKind; if (!z.shelves) z.shelves = 5; });
+      if (!persist()) toast('This phone has no room left to keep the map.');
+      notify(); refresh();
+      var label = { tall: 'Shelves', cooler: 'Cooler', freezer: 'Freezer', low: 'Counter' }[bulkKind];
+      toast(hit.length + ' box' + (hit.length === 1 ? '' : 'es') + ' set to ' + label + (miss.length ? '. Not found: ' + miss.slice(0, 4).join(', ') + (miss.length > 4 ? '...' : '') : ''));
+    });
     $('#zHeight').addEventListener('click', function (e) { var b = e.target.closest('[data-hs]'); if (b) setHs(parseFloat(b.getAttribute('data-hs'))); });
     $('#zSplitX').addEventListener('click', function () { splitZone('x'); });
     $('#zSplitY').addEventListener('click', function () { splitZone('y'); });

@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=55">
+<link rel="stylesheet" href="style.css?v=56">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -77,6 +77,11 @@
         <p>Drag on the photo to draw a box over each aisle or section. Tap a box to rename it, drag it to move it, and drag its corner square to resize it. Tidy up then straightens everything into a neat layout.</p>
         <p id="mapUnplaced"></p>
         <button class="btn block" id="mapTidyBtn" type="button">Tidy up</button>
+        <h2 style="margin-top:18px">Change many boxes at once</h2>
+        <p>Type the box names or ranges, pick a type, and tap Apply. For example <b>1-17, FD</b> or <b>C10-C17</b>.</p>
+        <div class="field full"><input id="bulkNames" placeholder="1-17, FD" autocomplete="off" autocapitalize="characters"></div>
+        <div class="field full"><div class="seg" id="bulkKind"><button type="button" data-bk="tall" aria-pressed="false">Shelves</button><button type="button" data-bk="cooler" aria-pressed="true">Cooler</button><button type="button" data-bk="freezer" aria-pressed="false">Freezer</button><button type="button" data-bk="low" aria-pressed="false">Counter</button></div></div>
+        <button class="btn block" id="bulkApply" type="button">Apply to these boxes</button>
       </div>
       <div class="glass card">
         <h2>Map settings</h2>
@@ -256,11 +261,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=55"></script>
-<script src="app.js?v=55"></script>
-<script src="photo.js?v=55"></script>
-<script src="scan.js?v=55"></script>
-<script src="map.js?v=55"></script>
-<script src="backup.js?v=55"></script>
+<script src="search.js?v=56"></script>
+<script src="app.js?v=56"></script>
+<script src="photo.js?v=56"></script>
+<script src="scan.js?v=56"></script>
+<script src="map.js?v=56"></script>
+<script src="backup.js?v=56"></script>
 </body>
 </html>
