@@ -440,6 +440,25 @@
 
   /* Start */
   items = loadLocal();
+  /* One-time repair: an earlier import put the price in Aisle and the stock count in Shelf. */
+  window.addEventListener('load', function () {
+    var K = 'shelf-finder-pricefix-v1', n = 0;
+    try { if (localStorage.getItem(K)) return; } catch (e) { return; }
+    items.forEach(function (i) {
+      if (!i.price && /^\d+\.\d{1,2}$/.test(i.section)) {
+        i.price = i.section; i.section = '';
+        if (/^-?\d+$/.test(i.shelf)) i.shelf = '';
+        n++;
+      }
+    });
+    if (n) {
+      if (window.ShelfBackup && window.ShelfBackup.snapshot) window.ShelfBackup.snapshot('Before fixing prices');
+      saveLocal();
+      items = items.map(mk);
+      renderAll();
+    }
+    try { localStorage.setItem(K, '1'); } catch (e) {}
+  });
   renderAll();
   try {
     if (navigator.storage && navigator.storage.persist) {
@@ -450,7 +469,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v39';
+  var APP_VERSION = 'v40';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
