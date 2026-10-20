@@ -535,7 +535,9 @@
     map = id === 'main' ? loadMap() : extras.filter(function (m) { return m.id === id; })[0] || null;
     loadImage(function () { refresh(); if (then) then(); });
   }
+  var held = null;
   function selectItem(it) {
+    held = it;
     var sp = spot(it), z = map ? findZone(map.zones, sp.section) : null;
     sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), item: it };
     if (edit) { edit = false; restoreView(); }
@@ -843,7 +845,7 @@
     });
     $('#mapTabs').addEventListener('click', function (e) {
       var t = e.target.closest('[data-mtab]'), n = e.target.closest('[data-mnew]');
-      if (t) { $('#mapNewForm').hidden = true; var keep = sel && sel.item; switchTo(t.getAttribute('data-mtab'), keep ? function () { if (map && imgEl) selectItem(keep); } : null); return; }
+      if (t) { $('#mapNewForm').hidden = true; var keep = (sel && sel.item) || held; switchTo(t.getAttribute('data-mtab'), keep ? function () { if (map && imgEl) selectItem(keep); } : null); return; }
       if (n) { var f = $('#mapNewForm'); f.hidden = !f.hidden; if (!f.hidden) setTimeout(function () { $('#mapNewName').focus(); }, 30); }
     });
     $('#mapNewForm').addEventListener('submit', function (e) {
