@@ -445,7 +445,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v37';
+  var APP_VERSION = 'v38';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
@@ -458,8 +458,12 @@
     var cs = window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : Promise.resolve();
     Promise.all([fetches, regs, cs]).catch(function () {}).then(function () { location.replace(location.pathname + '?u=' + Date.now()); });
   }
-  $('#updateBtn').addEventListener('click', function () { hardUpdate(this); });
-  $('#updateBar').addEventListener('click', function () { hardUpdate(null); this.textContent = 'Updating...'; });
+  function askThenUpdate(btn, bar) {
+    var go = function () { if (bar) bar.textContent = 'Updating...'; hardUpdate(btn); };
+    if (window.ShelfBackup && window.ShelfBackup.confirmUpdate) window.ShelfBackup.confirmUpdate(go); else go();
+  }
+  $('#updateBtn').addEventListener('click', function () { askThenUpdate(this, null); });
+  $('#updateBar').addEventListener('click', function () { askThenUpdate(null, this); });
   /* Tell the person when a newer version is online (checked on open and on return to the app). */
   function checkVersion() {
     if (!navigator.onLine || !window.fetch) return;
@@ -474,7 +478,6 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) checkVersion(); });
   if ('serviceWorker' in navigator) {
     var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (r) { document.addEventListener('visibilitychange', function () { if (!document.hidden) r.update().catch(function () {}); }); r.update().catch(function () {}); }).catch(function () {}); });
   }
 })();

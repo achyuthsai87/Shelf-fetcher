@@ -88,7 +88,7 @@
       if (show) nd.textContent = ch + ' new or changed bottle' + (ch === 1 ? '' : 's') + ' and section' + (ch === 1 ? '' : 's') + ' not backed up. Tap to save a backup.';
     }
   }
-  function saveFile() {
+  function saveFile(done) {
     var b = get(B), m = get(M), c = counts(b, m);
     if (!c.n && !c.z) { toast('Nothing to back up yet.'); return; }
     var payload = { app: 'shelf-finder', version: 1, savedAt: new Date().toISOString(), bottles: JSON.parse(b || '[]'), map: m ? JSON.parse(m) : null, mapView: get(R) };
@@ -98,7 +98,7 @@
     try {
       var file = new File([blob], name, { type: 'application/json' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: 'Shelf Finder backup' }).then(function () { markBackedUp(); toast('Backup saved: ' + c.n + ' bottles, ' + c.z + ' sections'); }, function () {});
+        navigator.share({ files: [file], title: 'Shelf Finder backup' }).then(function () { markBackedUp(); toast('Backup saved: ' + c.n + ' bottles, ' + c.z + ' sections'); if (typeof done === 'function') done(); }, function () {});
         return;
       }
     } catch (e) {}
@@ -107,6 +107,7 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     markBackedUp();
     toast('Backup saved: ' + c.n + ' bottles, ' + c.z + ' sections');
+    if (typeof done === 'function') setTimeout(done, 600);
   }
 
   function restoreFile(file) {
@@ -133,10 +134,10 @@
 
   function init() {
     if (!$('#saveBackupBtn')) return;
-    $('#saveBackupBtn').addEventListener('click', saveFile);
+    $('#saveBackupBtn').addEventListener('click', function () { saveFile(); });
     var nudge = document.createElement('button');
     nudge.id = 'backupNudge'; nudge.className = 'nudge'; nudge.type = 'button'; nudge.hidden = true;
-    nudge.addEventListener('click', saveFile);
+    nudge.addEventListener('click', function () { saveFile(); });
     var hero = document.querySelector('#tab-find .hero');
     if (hero && hero.parentNode) hero.parentNode.insertBefore(nudge, hero.nextSibling);
     /* After an app update, keep reminding until a backup is saved. */
@@ -170,6 +171,30 @@
     render();
   }
 
-  root.ShelfBackup = { snapshot: snapshot };
+  /* "Back up first?" before an update. Back up now, update anyway, or close (no update). */
+  function confirmUpdate(proceed) {
+    var old = document.getElementById('updateAsk');
+    if (old) old.remove();
+    var ch = changes(), lb = lastBackup();
+    var msg = !counts(get(B), get(M)).n && !counts(get(B), get(M)).z ? 'There is nothing saved on this phone yet.'
+      : ch ? ch + ' bottle or section change' + (ch === 1 ? ' is' : 's are') + ' not backed up' + (lb ? ' since ' + when(lb.t) : ' yet') + '. Updating keeps your data, but a backup file is your safety net.'
+      : 'Your last backup (' + (lb ? when(lb.t) : 'none') + ') is up to date. Updating keeps your data.';
+    var el = document.createElement('div');
+    el.className = 'scrim'; el.id = 'updateAsk';
+    el.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="Back up before updating"><h2>Back up before updating?</h2><p class="hint">' + esc(msg) + '</p>' +
+      '<div class="askbtns"><button class="btn" type="button" data-a="backup">Back up, then update</button><button class="btn ghost" type="button" data-a="anyway">Update anyway</button><button class="btn ghost" type="button" data-a="close">Close, don\u2019t update</button></div></div>';
+    document.body.appendChild(el);
+    el.addEventListener('click', function (e) {
+      var a = e.target.closest('[data-a]');
+      if (!a) { if (e.target === el) el.remove(); return; }
+      var k = a.getAttribute('data-a');
+      if (k === 'close') { el.remove(); return; }
+      if (k === 'anyway') { el.remove(); proceed(); return; }
+      el.remove();
+      saveFile(proceed);
+    });
+  }
+
+  root.ShelfBackup = { snapshot: snapshot, confirmUpdate: confirmUpdate };
   init();
 })(window);
