@@ -27,7 +27,7 @@
   }
   function mk(o) {
     var it = {
-      id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size),
+      id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size), price: norm(o.price),
       section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0
     };
     return window.ShelfSearch.prepare(it);
@@ -38,7 +38,7 @@
   function saveLocal() {
     try {
       localStorage.setItem(LS, JSON.stringify(items.map(function (i) {
-        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt };
+        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt };
       })));
       return true;
     } catch (e) { return false; }
@@ -130,6 +130,11 @@
     $('#dl-sections').innerHTML = Object.keys(secs).sort(cmp).map(function (k) { return '<option value="' + esc(secs[k]) + '">'; }).join('');
   }
 
+  function fmtPrice(p) {
+    var t = String(p || '').replace(/[$,\s]/g, '');
+    if (!/^\d+(\.\d+)?$/.test(t) || !parseFloat(t)) return '';
+    return '$' + parseFloat(t).toFixed(2);
+  }
   function renderList() {
     var list = $('#list'), empty = $('#emptyHost'), more = $('#moreBtn');
     var res = filtered();
@@ -160,7 +165,7 @@
         (meta ? '<p class="meta">' + hl(meta) + '</p>' : '') +
         (it.notes ? '<p class="notes">' + hl(it.notes) + '</p>' : '') +
         '</div>' + loc + '</div>' +
-        '<div class="actions">' + (window.ShelfMap && window.ShelfMap.has() ? '<button class="link" type="button" data-act="map">Show on map</button>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
+        '<div class="actions">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + (window.ShelfMap && window.ShelfMap.has() ? '<button class="link" type="button" data-act="map">Show on map</button>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
         '</li>';
     }).join('');
     if (res.length > shown.length) {
@@ -215,7 +220,7 @@
 
   /* Add / edit sheet */
   var F = {};
-  ['brand', 'flavor', 'type', 'size', 'section', 'shelf', 'notes'].forEach(function (k) { F[k] = $('#f-' + k); });
+  ['brand', 'flavor', 'type', 'size', 'price', 'section', 'shelf', 'notes'].forEach(function (k) { F[k] = $('#f-' + k); });
   function openSheet(it, pre) {
     editing = it ? it.id : null;
     var v = it || pre || {};
@@ -243,7 +248,7 @@
     var err = $('#formErr');
     if (!brand) { err.textContent = 'Enter the brand name so this bottle can be found.'; err.hidden = false; F.brand.focus(); return; }
     var it = mk({
-      id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value,
+      id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value, price: F.price.value,
       section: F.section.value, shelf: F.shelf.value, notes: F.notes.value
     });
     try {
@@ -278,12 +283,12 @@
     var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
     if (!lines.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
     var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
-    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
-    var cols = { brand: 0, flavor: 1, type: 2, size: 3, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
+    var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], price: ['price', 'retail', 'retail price', 'unit price', 'sell price', 'selling price', 'srp', 'cost'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
+    var cols = { brand: 0, flavor: 1, type: 2, size: 3, price: -1, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
     var h0 = parseLine(lines[0], delim).map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
     var map2 = {}, hits = 0;
     Object.keys(ALIASES).forEach(function (f) { var ix = -1; ALIASES[f].forEach(function (al) { if (ix < 0) ix = h0.indexOf(al); }); if (ix >= 0) { map2[f] = ix; hits++; } });
-    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
+    if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, price: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
     var byKey = {};
     items.forEach(function (i) { byKey[dupKey(i)] = i; });
     var added = 0, updated = 0, same = 0, fresh = [];
@@ -292,11 +297,11 @@
       var c = parseLine(l, delim);
       var g = function (f) { return cols[f] >= 0 && cols[f] < c.length ? c[cols[f]] : ''; };
       if (!g('brand')) return;
-      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
+      var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), price: g('price'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
       var k = dupKey(it), old = byKey[k];
       if (old) {
         var ch = false;
-        ['type', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
+        ['type', 'price', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
         if (ch) { old.updatedAt = Date.now(); updated++; } else same++;
         return;
       }
@@ -322,8 +327,8 @@
   function csvCell(s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   function exportCsv() {
     if (!items.length) { toast('Nothing to export yet.'); return; }
-    var rows = [['Brand', 'Flavor', 'Type', 'Size', 'Section', 'Shelf', 'Notes']].concat(
-      items.slice().sort(function (a, b) { return cmp(a.brand, b.brand); }).map(function (i) { return [i.brand, i.flavor, i.type, i.size, i.section, i.shelf, i.notes]; })
+    var rows = [['Brand', 'Flavor', 'Type', 'Size', 'Price', 'Section', 'Shelf', 'Notes']].concat(
+      items.slice().sort(function (a, b) { return cmp(a.brand, b.brand); }).map(function (i) { return [i.brand, i.flavor, i.type, i.size, i.price, i.section, i.shelf, i.notes]; })
     );
     var text = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
     var blob = new Blob([text], { type: 'text/csv' });
@@ -445,7 +450,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v38';
+  var APP_VERSION = 'v39';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
