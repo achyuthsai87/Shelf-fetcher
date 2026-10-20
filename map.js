@@ -560,17 +560,31 @@
     cv.addEventListener('pointercancel', function () { drawing = null; fast = false; schedule(); });
     window.addEventListener('resize', schedule);
     $('#mapPickBtn').addEventListener('click', function () { $('#mapFile').click(); });
-    $('#mapStarterBtn').addEventListener('click', function () {
-      Promise.all([fetch('./starter-layout.json').then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
+    function loadStarter() {
+      Promise.all([fetch('./starter-layout.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
         var fr = new FileReader();
         fr.onload = function () {
           var prev = map;
           map = { img: fr.result, w: res[0].w, h: res[0].h, zones: res[0].zones, topFirst: true };
           if (!persist()) { map = prev; toast('This phone has no room left to keep the map.'); return; }
+          sel = null; edit = false;
           loadImage(function () { refresh(); notify(); toast('Store layout loaded'); });
         };
         fr.readAsDataURL(res[1]);
       }).catch(function () { toast('Could not load the layout. Check your connection.'); });
+    }
+    $('#mapStarterBtn').addEventListener('click', loadStarter);
+    $('#mapLayoutBtn').addEventListener('click', function () {
+      var b = this;
+      if (b.getAttribute('data-armed') !== '1') {
+        b.setAttribute('data-armed', '1');
+        b.textContent = 'Tap again: this replaces your sections';
+        setTimeout(function () { b.removeAttribute('data-armed'); b.textContent = 'Reload the latest store layout'; }, 3500);
+        return;
+      }
+      b.removeAttribute('data-armed');
+      b.textContent = 'Reload the latest store layout';
+      loadStarter();
     });
     $('#mapReplaceBtn').addEventListener('click', function () { $('#mapFile').click(); });
     $('#mapFile').addEventListener('change', function (e) {

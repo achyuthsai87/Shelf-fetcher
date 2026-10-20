@@ -444,7 +444,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v10';
+  var APP_VERSION = 'v11';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   $('#updateBtn').addEventListener('click', function () {
     var b = this;
