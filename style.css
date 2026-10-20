@@ -363,8 +363,8 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .match-label { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
 
 /* Store map */
-:root { --green: #15915f; }
-@media (prefers-color-scheme: dark) { :root { --green: #34d399; } }
+:root { --green: #15915f; --dot: #ff2d8a; }
+@media (prefers-color-scheme: dark) { :root { --green: #34d399; --dot: #ff4fa3; } }
 .mapsearch { display: grid; gap: 8px; margin-bottom: 10px; }
 .suggest { display: flex; gap: 8px; flex-wrap: wrap; }
 .suggest .chip { flex: none; max-width: 100%; }
@@ -379,7 +379,7 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--dot);
   border: 2.5px solid #fff;
   animation: mapPulse 1.7s ease-out infinite;
 }
@@ -393,14 +393,14 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 99px;
-  background: var(--green);
+  background: var(--dot);
   color: #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 @keyframes mapPulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 70%, transparent), 0 0 12px 3px color-mix(in srgb, var(--green) 60%, transparent); }
-  70% { box-shadow: 0 0 0 26px color-mix(in srgb, var(--green) 0%, transparent), 0 0 20px 7px color-mix(in srgb, var(--green) 55%, transparent); }
-  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 0%, transparent), 0 0 12px 3px color-mix(in srgb, var(--green) 60%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot) 70%, transparent), 0 0 12px 3px color-mix(in srgb, var(--dot) 60%, transparent); }
+  70% { box-shadow: 0 0 0 26px color-mix(in srgb, var(--dot) 0%, transparent), 0 0 20px 7px color-mix(in srgb, var(--dot) 55%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot) 0%, transparent), 0 0 12px 3px color-mix(in srgb, var(--dot) 60%, transparent); }
 }
 .mapcaption { display: grid; gap: 2px; padding: 12px 16px; }
 .mapcaption span { color: var(--muted); font-size: 13px; }
