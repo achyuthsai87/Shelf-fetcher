@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=48">
+<link rel="stylesheet" href="style.css?v=49">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -45,9 +45,14 @@
 
   <section class="tabpane" id="tab-map">
     <h1>Store map</h1>
+    <div class="suggest maptabs" id="mapTabs"></div>
+    <form class="mapnew" id="mapNewForm" hidden>
+      <input class="search" id="mapNewName" maxlength="24" placeholder="Name it: Garage, Inventory, Back room" autocomplete="off">
+      <div class="mapnewbtns"><button class="btn" type="submit">Create map</button><button class="btn ghost" id="mapNewCancel" type="button">Cancel</button></div>
+    </form>
     <div class="glass card" id="mapEmpty">
-      <h2>Add your store plan</h2>
-      <p>Take a photo of your drawing or printout, or choose a PDF of it. It becomes a guide you trace over. The app then draws a clean 3D version of your store and makes the bottle glow where it sits.</p>
+      <h2 id="mapEmptyTitle">Add your store plan</h2>
+      <p id="mapEmptyText">Take a photo of your drawing or printout, or choose a PDF of it. It becomes a guide you trace over. The app then draws a clean 3D version of your store and makes the bottle glow where it sits.</p>
       <button class="btn block" id="mapPickBtn" type="button">Choose a PDF, or take a photo</button>
       <button class="btn ghost block" id="mapStarterBtn" type="button" style="margin-top:8px">Use the store layout from the drawing</button>
     </div>
@@ -84,6 +89,12 @@
         </div>
         <p class="hint">The plan photo and your sections are saved on this phone only. Remove map deletes them.</p>
       </div>
+    </div>
+    <div class="glass card" id="mapManage" hidden>
+      <h2>This map</h2>
+      <div class="field"><label for="mapName">Name</label><input id="mapName" maxlength="24"></div>
+      <button class="btn ghost danger block" id="mapDeleteBtn" type="button" style="margin-top:10px">Delete this map</button>
+      <p class="hint">Deleting removes this map and its sections from this phone.</p>
     </div>
     <input id="mapFile" type="file" accept="image/*,application/pdf,.pdf" hidden>
   </section>
@@ -146,6 +157,7 @@
       <div class="field"><label for="f-section">Aisle or section</label><input id="f-section" list="dl-sections" placeholder="Aisle 3"></div>
       <div class="field"><label for="f-shelf">Shelf</label><input id="f-shelf" placeholder="2"></div>
       <div class="field full" id="shelfPick" hidden></div>
+      <div class="field full placesbox" id="placesHost" hidden></div>
       <div class="field full"><label for="f-notes">Description (searchable)</label><textarea id="f-notes" placeholder="Smoky, sweet, cheap rail whiskey, also called Beam"></textarea></div>
     </div>
     <p class="err" id="formErr" hidden></p>
@@ -217,10 +229,10 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=48"></script>
-<script src="app.js?v=48"></script>
-<script src="photo.js?v=48"></script>
-<script src="map.js?v=48"></script>
-<script src="backup.js?v=48"></script>
+<script src="search.js?v=49"></script>
+<script src="app.js?v=49"></script>
+<script src="photo.js?v=49"></script>
+<script src="map.js?v=49"></script>
+<script src="backup.js?v=49"></script>
 </body>
 </html>

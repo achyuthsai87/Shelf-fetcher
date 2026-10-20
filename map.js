@@ -331,8 +331,34 @@
     try { var m = JSON.parse(localStorage.getItem(KEY) || 'null'); if (m && m.img) return m; } catch (e) {}
     return null;
   }
+  var KEY2 = 'shelf-finder-maps-v1', extras = [], cur = 'main';
+  function loadExtras() {
+    try { var a = JSON.parse(localStorage.getItem(KEY2) || '[]'); return Array.isArray(a) ? a.filter(function (m) { return m && m.id; }) : []; } catch (e) { return []; }
+  }
+  function saveExtras() { try { localStorage.setItem(KEY2, JSON.stringify(extras)); return true; } catch (e) { return false; } }
   function persist() {
-    try { localStorage.setItem(KEY, JSON.stringify(map)); return true; } catch (e) { return false; }
+    try {
+      if (cur === 'main') localStorage.setItem(KEY, JSON.stringify(map));
+      else {
+        var i = extras.findIndex(function (m) { return m.id === cur; });
+        if (i >= 0) extras[i] = map;
+        localStorage.setItem(KEY2, JSON.stringify(extras));
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+  function mapName(id) {
+    id = id || cur;
+    if (id === 'main') return 'Store';
+    var m = extras.filter(function (x) { return x.id === id; })[0];
+    return m ? (m.name || 'Map') : 'Map';
+  }
+  /* Where a bottle sits on one map: the main store map uses its Aisle and Shelf, every other map uses its places list. */
+  function spot(it, id) {
+    id = id || cur;
+    if (id === 'main') return { section: it.section || '', shelf: it.shelf || '' };
+    var p = (it.places || []).filter(function (x) { return x.m === id; })[0];
+    return p ? { section: p.section || '', shelf: p.shelf || '' } : { section: '', shelf: '' };
   }
   var toastTimer = null;
   function toast(msg) {
@@ -347,7 +373,7 @@
   function newId() { return 'z' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
   function loadImage(cb) {
-    if (!map) { imgEl = null; cb(); return; }
+    if (!map || !map.img) { imgEl = null; cb(); return; }
     var im = new Image();
     im.onload = function () { imgEl = im; cb(); };
     im.onerror = function () { imgEl = null; cb(); };
@@ -383,6 +409,7 @@
       c.width = 0; c.height = 0;
       var prev = map;
       map = { img: url, w: cw, h: ch, zones: prev ? prev.zones : [], topFirst: prev ? prev.topFirst : true };
+      if (cur !== 'main' && prev) { map.id = prev.id; map.name = prev.name; }
       if (!persist()) { map = prev; toast('This phone has no room left to keep the map.'); return; }
       loadImage(function () { refresh(); toast('Map saved on this phone'); });
     };
@@ -432,7 +459,7 @@
       dw.hidden = false;
       dw.style.left = last.dot.X + 'px';
       dw.style.top = last.dot.Y + 'px';
-      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level : (sel.item && String(sel.item.shelf).trim() === '0' ? ' · On top' : ''));
+      $('#mapTag').textContent = z.name + (sel.level ? ' · Shelf ' + sel.level : (sel.item && String(spot(sel.item).shelf).trim() === '0' ? ' · On top' : ''));
     } else dw.hidden = true;
   }
 
@@ -446,15 +473,30 @@
     var have = {}, out = [], seen = {};
     map.zones.forEach(function (z) { have[String(z.name).trim().toLowerCase()] = 1; });
     items().forEach(function (i) {
-      var k = i.section.toLowerCase();
-      if (k && !have[k] && !seen[k]) { seen[k] = 1; out.push(i.section); }
+      var sp = spot(i), k = sp.section.toLowerCase();
+      if (k && !have[k] && !seen[k]) { seen[k] = 1; out.push(sp.section); }
     });
     return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
   }
+  function renderTabs() {
+    var h = '<button class="chip" type="button" data-mtab="main" aria-pressed="' + (cur === 'main') + '">Store</button>';
+    extras.forEach(function (m) { h += '<button class="chip" type="button" data-mtab="' + esc(m.id) + '" aria-pressed="' + (cur === m.id) + '">' + esc(m.name || 'Map') + '</button>'; });
+    h += '<button class="chip" type="button" data-mnew="1">+ Add map</button>';
+    $('#mapTabs').innerHTML = h;
+    $('#tab-map h1').textContent = extras.length ? 'Maps' : 'Store map';
+  }
   function refresh() {
-    var has = !!(map && imgEl);
+    var has = !!(map && imgEl), isMain = cur === 'main';
+    renderTabs();
     $('#mapEmpty').hidden = has;
     $('#mapMain').hidden = !has;
+    $('#mapEmptyTitle').textContent = isMain ? 'Add your store plan' : 'Add a plan for ' + mapName();
+    $('#mapEmptyText').textContent = isMain ? 'Take a photo of your drawing or printout, or choose a PDF of it. It becomes a guide you trace over. The app then draws a clean 3D version of your store and makes the bottle glow where it sits.' : 'Take a photo of the drawing or choose a PDF of it. It becomes a guide you trace over, and then this place gets its own 3D map.';
+    $('#mapStarterBtn').hidden = !isMain;
+    $('#mapLayoutBtn').hidden = !isMain;
+    $('#mapRemoveBtn').hidden = !isMain;
+    $('#mapManage').hidden = isMain;
+    if (!isMain && document.activeElement !== $('#mapName')) $('#mapName').value = mapName();
     if (has) {
       $('#mapEditBtn').textContent = edit ? 'Done' : 'Edit sections';
       $('#mapEditHelp').hidden = !edit;
@@ -479,14 +521,23 @@
     if (!sel || !sel.item) { c.hidden = true; return; }
     var it = sel.item, z = map && map.zones.filter(function (q) { return q.id === sel.zoneId; })[0];
     var name = it.brand + (it.flavor ? ' ' + it.flavor : '');
-    var where = it.section ? it.section + (it.shelf ? (String(it.shelf).trim() === '0' ? ', on top' : ', shelf ' + it.shelf) : '') : 'No spot saved yet';
+    var sp = spot(it);
+    var where = sp.section ? sp.section + (sp.shelf ? (String(sp.shelf).trim() === '0' ? ', on top' : ', shelf ' + sp.shelf) : '') : (cur === 'main' ? 'No spot saved yet' : 'No spot saved on ' + mapName());
     c.hidden = false;
     c.innerHTML = '<strong>' + esc(name) + '</strong><span>' + esc(where) + '</span>' +
-      (z ? '' : (it.section ? '<em>' + esc(it.section) + ' is not marked on the map yet. Tap Edit sections to add it.</em>' : ''));
+      (z ? '' : (sp.section ? '<em>' + esc(sp.section) + ' is not marked on the map yet. Tap Edit sections to add it.</em>' : ''));
+  }
+  function switchTo(id, then) {
+    if (id !== 'main' && !extras.some(function (m) { return m.id === id; })) id = 'main';
+    if (id === cur && map !== undefined && (id !== 'main' || map)) { if (then) then(); return; }
+    if (edit) { edit = false; restoreView(); }
+    cur = id; sel = null; pendingName = ''; zoom = 1; panX = 0; panY = 0; yaw = 0;
+    map = id === 'main' ? loadMap() : extras.filter(function (m) { return m.id === id; })[0] || null;
+    loadImage(function () { refresh(); if (then) then(); });
   }
   function selectItem(it) {
-    var z = map ? findZone(map.zones, it.section) : null;
-    sel = { zoneId: z ? z.id : null, level: shelfNumber(it.shelf), item: it };
+    var sp = spot(it), z = map ? findZone(map.zones, sp.section) : null;
+    sel = { zoneId: z ? z.id : null, level: shelfNumber(sp.shelf), item: it };
     if (edit) { edit = false; restoreView(); }
     zoom = 1; panX = 0; panY = 0;
     focusDot = !!z;
@@ -515,7 +566,7 @@
     $('#zDelete').hidden = !z;
     $('#zoneErr').hidden = true;
     var names = {};
-    items().forEach(function (i) { if (i.section) names[i.section.toLowerCase()] = i.section; });
+    items().forEach(function (i) { var sp = spot(i); if (sp.section) names[sp.section.toLowerCase()] = sp.section; });
     $('#dl-zone').innerHTML = Object.keys(names).sort().map(function (k) { return '<option value="' + esc(names[k]) + '">'; }).join('');
     openZone.rect = rect || null;
     $('#zoneScrim').hidden = false;
@@ -703,6 +754,7 @@
   }
 
   function init() {
+    extras = loadExtras(); cur = 'main';
     map = loadMap();
     var cv = $('#mapCanvas');
     cv.addEventListener('pointerdown', onDown);
@@ -789,12 +841,58 @@
       notify();
       toast('Map removed from this phone');
     });
+    $('#mapTabs').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-mtab]'), n = e.target.closest('[data-mnew]');
+      if (t) { $('#mapNewForm').hidden = true; switchTo(t.getAttribute('data-mtab')); return; }
+      if (n) { var f = $('#mapNewForm'); f.hidden = !f.hidden; if (!f.hidden) setTimeout(function () { $('#mapNewName').focus(); }, 30); }
+    });
+    $('#mapNewForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var nm = $('#mapNewName').value.trim();
+      if (!nm) { toast('Give the map a name, like Garage or Inventory.'); return; }
+      var m = { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: nm.slice(0, 24), zones: [], topFirst: true };
+      extras.push(m);
+      if (!saveExtras()) { extras.pop(); toast('This phone has no room left to keep another map.'); return; }
+      $('#mapNewName').value = ''; $('#mapNewForm').hidden = true;
+      switchTo(m.id);
+      notify();
+    });
+    $('#mapNewCancel').addEventListener('click', function () { $('#mapNewForm').hidden = true; });
+    $('#mapName').addEventListener('change', function () {
+      var nm = this.value.trim();
+      if (cur === 'main' || !map) return;
+      if (!nm) { this.value = mapName(); return; }
+      map.name = nm.slice(0, 24);
+      persist(); refresh(); notify();
+    });
+    $('#mapDeleteBtn').addEventListener('click', function () {
+      var b = this;
+      if (b.getAttribute('data-armed') !== '1') {
+        b.setAttribute('data-armed', '1');
+        b.textContent = 'Tap again to delete this map';
+        setTimeout(function () { b.removeAttribute('data-armed'); b.textContent = 'Delete this map'; }, 3000);
+        return;
+      }
+      b.removeAttribute('data-armed'); b.textContent = 'Delete this map';
+      if (cur === 'main') return;
+      if (window.ShelfBackup) window.ShelfBackup.snapshot('Before deleting a map');
+      var gone = cur;
+      extras = extras.filter(function (m) { return m.id !== gone; });
+      saveExtras();
+      cur = 'main'; map = loadMap(); sel = null; edit = false; savedView = null;
+      loadImage(function () { refresh(); notify(); toast('Map deleted'); });
+    });
     $('#mapSearch').addEventListener('input', suggest);
     $('#mapSuggest').addEventListener('click', function (e) {
       var b = e.target.closest('[data-pick]');
       if (!b) return;
       var it = items().filter(function (x) { return x.id === b.getAttribute('data-pick'); })[0];
-      if (it) selectItem(it);
+      if (!it) return;
+      if (!spot(it).section) {
+        var alt = ['main'].concat(extras.map(function (m) { return m.id; })).filter(function (id) { return spot(it, id).section; })[0];
+        if (alt && alt !== cur) { switchTo(alt, function () { if (map && imgEl) selectItem(it); }); return; }
+      }
+      selectItem(it);
     });
     $('#mapUnplaced').addEventListener('click', function (e) {
       var b = e.target.closest('[data-pend]');
@@ -811,16 +909,22 @@
 
   root.ShelfMap = {
     debug: function () { return { zoom: zoom, panX: panX, panY: panY, yaw: yaw, pointers: Object.keys(pointers).length }; },
-    has: function () { return !!(map && map.zones && map.zones.length); },
-    zoneNames: function () { return map && map.zones ? map.zones.map(function (z) { return z.name; }) : []; },
-    zoneInfo: function (name) {
-      var z = map && map.zones ? findZone(map.zones, name) : null;
-      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: map.topFirst !== false } : null;
+    maps: function () { return [{ id: 'main', name: 'Store' }].concat(extras.map(function (m) { return { id: m.id, name: m.name || 'Map' }; })); },
+    has: function (id) {
+      id = id || 'main';
+      var m = id === cur ? map : (id === 'main' ? loadMap() : extras.filter(function (x) { return x.id === id; })[0]);
+      return !!(m && m.zones && m.zones.length);
+    },
+    mapOf: function (id) { return id === 'main' ? loadMap() : extras.filter(function (x) { return x.id === id; })[0] || null; },
+    zoneNames: function (id) { var m = this.mapOf(id || 'main'); return m && m.zones ? m.zones.map(function (z) { return z.name; }) : []; },
+    zoneInfo: function (name, id) {
+      var m = this.mapOf(id || 'main'), z = m && m.zones ? findZone(m.zones, name) : null;
+      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false } : null;
     },
     onShow: function () { refresh(); },
-    show: function (it) {
+    show: function (it, id) {
       if (root.ShelfApp) root.ShelfApp.showTab('map');
-      if (map && imgEl) selectItem(it);
+      switchTo(id || 'main', function () { if (map && imgEl) selectItem(it); });
     }
   };
   init();

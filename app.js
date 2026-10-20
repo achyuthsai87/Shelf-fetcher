@@ -28,7 +28,8 @@
   function mk(o) {
     var it = {
       id: o.id, brand: norm(o.brand), flavor: norm(o.flavor), type: norm(o.type), size: norm(o.size), price: norm(o.price),
-      section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0
+      section: norm(o.section), shelf: norm(o.shelf), notes: norm(o.notes), updatedAt: o.updatedAt || 0,
+      places: (Array.isArray(o.places) ? o.places : []).map(function (p) { return { m: norm(p && p.m), section: norm(p && p.section), shelf: norm(p && p.shelf) }; }).filter(function (p) { return p.m && (p.section || p.shelf); })
     };
     return window.ShelfSearch.prepare(it);
   }
@@ -38,7 +39,7 @@
   function saveLocal() {
     try {
       localStorage.setItem(LS, JSON.stringify(items.map(function (i) {
-        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt };
+        return { id: i.id, brand: i.brand, flavor: i.flavor, type: i.type, size: i.size, price: i.price, section: i.section, shelf: i.shelf, notes: i.notes, updatedAt: i.updatedAt, places: i.places && i.places.length ? i.places : undefined };
       })));
       return true;
     } catch (e) { return false; }
@@ -81,7 +82,7 @@
   function filtered() {
     var pool = items.filter(function (it) {
       if (typeF && it.type.toLowerCase() !== typeF) return false;
-      if (noSpot && (it.section || it.shelf)) return false;
+      if (noSpot && (it.section || it.shelf || it.places.length)) return false;
       return true;
     });
     if (tokens.length) return window.ShelfSearch.run(pool, q).map(function (r) { return r.it; });
@@ -110,7 +111,7 @@
     if (typeF && !counts[typeF]) typeF = '';
     var h = '';
     if (keys.length) {
-      var ns = items.filter(function (i) { return !i.section && !i.shelf; }).length;
+      var ns = items.filter(function (i) { return !i.section && !i.shelf && !i.places.length; }).length;
       h += '<button class="chip" type="button" data-type="" aria-pressed="' + (!typeF && !noSpot) + '">All <span>' + items.length + '</span></button>';
       if (ns) h += '<button class="chip" type="button" data-nospot="1" aria-pressed="' + noSpot + '">No spot yet <span>' + ns + '</span></button>';
       keys.forEach(function (k) {
@@ -135,6 +136,24 @@
     if (!/^\d+(\.\d+)?$/.test(t) || !parseFloat(t)) return '';
     return '$' + parseFloat(t).toFixed(2);
   }
+  function mapLabel(id) {
+    var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    for (var i = 0; i < ms.length; i++) if (ms[i].id === id) return ms[i].name;
+    return '';
+  }
+  function renderPlaces(it) {
+    var host = $('#placesHost'), ms = (window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : []).filter(function (m) { return m.id !== 'main'; });
+    if (!ms.length) { host.innerHTML = ''; host.hidden = true; return; }
+    host.hidden = false;
+    host.innerHTML = '<span class="hint">Also kept on other maps (leave blank if not there)</span>' + ms.map(function (m) {
+      var p = ((it && it.places) || []).filter(function (x) { return x.m === m.id; })[0] || {};
+      var names = window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(m.id) : [];
+      return '<div class="placerow" data-pm="' + esc(m.id) + '"><b>' + esc(m.name) + '</b>' +
+        '<input data-ps list="dl-pm-' + esc(m.id) + '" placeholder="Section" value="' + esc(p.section || '') + '" autocapitalize="characters">' +
+        '<datalist id="dl-pm-' + esc(m.id) + '">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+        '<input data-pf inputmode="numeric" placeholder="Shelf (0 = on top)" value="' + esc(p.shelf || '') + '"></div>';
+    }).join('');
+  }
   function renderList() {
     var list = $('#list'), empty = $('#emptyHost'), more = $('#moreBtn');
     var res = filtered();
@@ -156,14 +175,20 @@
     var shown = res.slice(0, limit);
     list.innerHTML = shown.map(function (it) {
       var meta = [it.type, it.size].filter(Boolean).join(' · ');
+      var xp = (it.places || []).map(function (p) {
+        var nm = mapLabel(p.m);
+        if (!nm) return '';
+        return '<button class="pill" type="button" data-pm="' + esc(p.m) + '">' + esc(nm) + ' · ' + hl(p.section || '') + (p.shelf ? (p.section ? ' · ' : '') + (p.shelf === '0' ? 'on top' : 'shelf ' + hl(p.shelf)) : '') + '</button>';
+      }).join('');
       var loc = it.section || it.shelf
         ? '<div class="loc"><span class="sec">' + (it.section ? hl(it.section) : 'Shelf') + '</span>' + (it.shelf ? '<span class="shelf">' + (it.shelf === '0' && it.section ? 'On top' : (it.section ? 'Shelf ' : '') + hl(it.shelf)) + '</span>' : '') + '</div>'
-        : '<div class="loc none"><span class="sec">No spot yet</span></div>';
+        : '<div class="loc none"><span class="sec">' + (xp ? 'Not on floor' : 'No spot yet') + '</span></div>';
       return '<li class="glass item" data-id="' + esc(it.id) + '"><div class="row"><div class="info">' +
         '<h3 class="brand">' + hl(it.brand) + '</h3>' +
         (it.flavor ? '<p class="flavor">' + hl(it.flavor) + '</p>' : '') +
         (meta ? '<p class="meta">' + hl(meta) + '</p>' : '') +
         (it.notes ? '<p class="notes">' + hl(it.notes) + '</p>' : '') +
+        (xp ? '<div class="places">' + xp + '</div>' : '') +
         '</div>' + loc + '</div>' +
         '<div class="actions">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
         '</li>';
@@ -230,6 +255,7 @@
     $('#saveNextBtn').hidden = !!it;
     $('#sheetScrim').hidden = false;
     syncShelfPick();
+    renderPlaces(it);
     if (!it) setTimeout(function () { F.brand.focus(); }, 30);
     else if (!it.section) setTimeout(function () { F.section.focus(); }, 30);
   }
@@ -249,8 +275,12 @@
     if (!brand) { err.textContent = 'Enter the brand name so this bottle can be found.'; err.hidden = false; F.brand.focus(); return; }
     var it = mk({
       id: editing || newId(), brand: brand, flavor: F.flavor.value, type: F.type.value, size: F.size.value, price: F.price.value,
-      section: F.section.value, shelf: F.shelf.value, notes: F.notes.value
+      section: F.section.value, shelf: F.shelf.value, notes: F.notes.value,
+      places: Array.prototype.map.call(document.querySelectorAll('#placesHost .placerow'), function (r) {
+        return { m: r.getAttribute('data-pm'), section: r.querySelector('[data-ps]').value, shelf: r.querySelector('[data-pf]').value };
+      })
     });
+    /* Places on maps that still exist but are not shown (none) are kept from the saved bottle. */
     try {
       save(it);
     } catch (e) {
@@ -393,8 +423,10 @@
     var it = items.find(function (x) { return x.id === id; });
     if (!it) return;
     if (!b) {
+      var pl = e.target.closest('[data-pm]');
+      if (pl && window.ShelfMap) { window.ShelfMap.show(it, pl.getAttribute('data-pm')); return; }
       var lb = e.target.closest('.loc');
-      if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has()) window.ShelfMap.show(it);
+      if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has('main')) window.ShelfMap.show(it, 'main');
       return;
     }
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
@@ -473,7 +505,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v48';
+  var APP_VERSION = 'v49';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

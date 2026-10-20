@@ -5,13 +5,14 @@
    Nothing here ever leaves the phone unless you save the file. */
 (function (root) {
   'use strict';
-  var LV = 'shelf-finder-lastver-v1', LF = 'shelf-finder-forcenudge-v1', LB = 'shelf-finder-lastbackup-v1', B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
+  var LV = 'shelf-finder-lastver-v1', LF = 'shelf-finder-forcenudge-v1', LB = 'shelf-finder-lastbackup-v1', B = 'shelf-finder-bottles-v1', M = 'shelf-finder-map-v1', X = 'shelf-finder-maps-v1', R = 'shelf-finder-maprot', S = 'shelf-finder-snapshots-v1', MAX = 6;
   var $ = function (s) { return document.querySelector(s); };
   function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  function counts(b, m) {
+  function counts(b, m, x) {
     var n = 0, z = 0;
     try { n = (JSON.parse(b || '[]') || []).length; } catch (e) {}
     try { var mm = JSON.parse(m || 'null'); z = mm && mm.zones ? mm.zones.length : 0; } catch (e) {}
+    try { (JSON.parse(x || '[]') || []).forEach(function (q) { z += q && q.zones ? q.zones.length : 0; }); } catch (e) {}
     return { n: n, z: z };
   }
   function list() { try { return JSON.parse(get(S) || '[]') || []; } catch (e) { return []; } }
@@ -22,11 +23,11 @@
     return false;
   }
   function snapshot(reason) {
-    var b = get(B), m = get(M), c = counts(b, m);
+    var b = get(B), m = get(M), x = get(X), c = counts(b, m, x);
     if (!c.n && !c.z) return false;
     var l = list();
-    if (l.length && l[0].b === b && l[0].m === m) return false;
-    l.unshift({ t: Date.now(), reason: reason || 'Automatic', b: b, m: m, n: c.n, z: c.z });
+    if (l.length && l[0].b === b && l[0].m === m && l[0].x === x) return false;
+    l.unshift({ t: Date.now(), reason: reason || 'Automatic', b: b, m: m, x: x, n: c.n, z: c.z });
     var ok = writeList(l.slice(0, MAX));
     render();
     return ok;
@@ -43,11 +44,12 @@
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-  function apply(b, m, rot) {
+  function apply(b, m, rot, x) {
     snapshot('Before restore');
     try {
       localStorage.setItem(B, b || '[]');
       if (m) localStorage.setItem(M, m); else localStorage.removeItem(M);
+      if (x !== undefined) { if (x) localStorage.setItem(X, x); else localStorage.removeItem(X); }
       if (rot != null) localStorage.setItem(R, rot);
     } catch (e) { toast('Could not restore: this phone is out of space.'); return; }
     location.reload();
@@ -56,13 +58,14 @@
   function djb(s) { var h = 5381, i; for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return String(h); }
   function sigs() {
     var it = {}, zs = {};
-    try { (JSON.parse(get(B) || '[]') || []).forEach(function (x) { it[x.id] = djb([x.brand, x.flavor, x.type, x.size, x.section, x.shelf, x.notes].join('\u0001')); }); } catch (e) {}
+    try { (JSON.parse(get(B) || '[]') || []).forEach(function (x) { it[x.id] = djb([x.brand, x.flavor, x.type, x.size, x.section, x.shelf, x.notes, JSON.stringify(x.places || [])].join('\u0001')); }); } catch (e) {}
     try { var mm = JSON.parse(get(M) || 'null'); ((mm && mm.zones) || []).forEach(function (z) { zs[z.id] = djb([z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind].join('\u0001')); }); } catch (e) {}
+    try { (JSON.parse(get(X) || '[]') || []).forEach(function (q) { ((q && q.zones) || []).forEach(function (z) { zs[q.id + ':' + z.id] = djb([z.name, z.x, z.y, z.w, z.h, z.shelves, z.kind].join('\u0001')); }); zs[q.id + ':map'] = djb(String(q.name) + (q.img ? q.img.length : 0)); }); } catch (e) {}
     return { i: it, z: zs };
   }
   function lastBackup() { try { return JSON.parse(get(LB) || 'null'); } catch (e) { return null; } }
   function markBackedUp() {
-    var c = counts(get(B), get(M)), s = sigs();
+    var c = counts(get(B), get(M), get(X)), s = sigs();
     try { localStorage.setItem(LB, JSON.stringify({ t: Date.now(), n: c.n, z: c.z, i: s.i, zs: s.z })); localStorage.removeItem(LF); } catch (e) {}
     status();
   }
@@ -89,9 +92,9 @@
     }
   }
   function saveFile(done) {
-    var b = get(B), m = get(M), c = counts(b, m);
+    var b = get(B), m = get(M), x = get(X), c = counts(b, m, x);
     if (!c.n && !c.z) { toast('Nothing to back up yet.'); return; }
-    var payload = { app: 'shelf-finder', version: 1, savedAt: new Date().toISOString(), bottles: JSON.parse(b || '[]'), map: m ? JSON.parse(m) : null, mapView: get(R) };
+    var payload = { app: 'shelf-finder', version: 2, savedAt: new Date().toISOString(), bottles: JSON.parse(b || '[]'), map: m ? JSON.parse(m) : null, maps: x ? JSON.parse(x) : [], mapView: get(R) };
     var d = new Date(), p = function (x) { return (x < 10 ? '0' : '') + x; };
     var name = 'shelf-finder-backup-' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '.json';
     var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -116,9 +119,11 @@
       var o;
       try { o = JSON.parse(String(r.result || '')); } catch (e) { o = null; }
       if (!o || o.app !== 'shelf-finder' || !Array.isArray(o.bottles) || (o.map && !o.map.img)) { toast('That is not a Shelf Finder backup file.'); return; }
-      var c = counts(JSON.stringify(o.bottles), o.map ? JSON.stringify(o.map) : null);
+      if (o.maps != null && !Array.isArray(o.maps)) { toast('That is not a Shelf Finder backup file.'); return; }
+      var xs = Array.isArray(o.maps) ? JSON.stringify(o.maps) : null;
+      var c = counts(JSON.stringify(o.bottles), o.map ? JSON.stringify(o.map) : null, xs);
       if (!window.confirm('Replace what is on this phone with the backup (' + c.n + ' bottles, ' + c.z + ' sections)? Your current data is saved to the automatic backups first.')) return;
-      apply(JSON.stringify(o.bottles), o.map ? JSON.stringify(o.map) : null, o.mapView);
+      apply(JSON.stringify(o.bottles), o.map ? JSON.stringify(o.map) : null, o.mapView, xs === null ? undefined : xs);
     };
     r.readAsText(file);
   }
@@ -156,7 +161,7 @@
       var s = list()[parseInt(b.getAttribute('data-restore'), 10)];
       if (!s) return;
       if (!window.confirm('Go back to ' + when(s.t) + ' (' + s.n + ' bottles, ' + s.z + ' sections)? What is on the phone now is saved to the automatic backups first.')) return;
-      apply(s.b, s.m, null);
+      apply(s.b, s.m, null, s.x);
     });
     var standalone = !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
     function note(p) {

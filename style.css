@@ -447,3 +447,14 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 
 .actions .price { margin-right: auto; align-self: center; padding-left: 8px; font-weight: 600; color: var(--ink); }
 .loc:not(.none) { cursor: pointer; }
+
+.maptabs { margin-bottom: 10px; }
+.mapnew { display: grid; gap: 8px; margin-bottom: 10px; }
+.mapnewbtns { display: flex; gap: 8px; }
+.mapnewbtns .btn { flex: 1; }
+.places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pill { border: 0; border-radius: 99px; background: var(--chip); color: var(--ink); font-size: 12.5px; font-weight: 600; padding: 5px 10px; min-height: 28px; }
+
+.placesbox { display: grid; gap: 8px; }
+.placerow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+.placerow b { grid-column: 1 / -1; font-size: 13px; }
