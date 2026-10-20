@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -77,8 +77,11 @@
         <h2>Map settings</h2>
         <div class="setrow"><span>Look</span><div class="seg"><button id="segClean" type="button" aria-pressed="true">Clean</button><button id="segPhoto" type="button" aria-pressed="false">My drawing</button></div></div>
         <div class="setrow"><span>Shelf 1 is the</span><div class="seg"><button id="segTop" type="button" aria-pressed="true">Top</button><button id="segBottom" type="button" aria-pressed="false">Bottom</button></div></div>
-        <div class="sheet-actions"><button class="btn ghost block" id="mapLayoutBtn" type="button">Reload the latest store layout</button></div>
-        <div class="sheet-actions"><button class="btn ghost grow" id="mapReplaceBtn" type="button">Replace photo</button><button class="btn ghost grow" id="mapRemoveBtn" type="button">Remove map</button></div>
+        <div class="mapactions">
+          <button class="btn ghost" id="mapLayoutBtn" type="button">Reload the latest store layout</button>
+          <button class="btn ghost" id="mapReplaceBtn" type="button">Replace photo</button>
+          <button class="btn ghost danger" id="mapRemoveBtn" type="button">Remove map</button>
+        </div>
         <p class="hint">The plan photo and your sections are saved on this phone only. Remove map deletes them.</p>
       </div>
     </div>
@@ -200,9 +203,9 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=23"></script>
-<script src="app.js?v=23"></script>
-<script src="photo.js?v=23"></script>
-<script src="map.js?v=23"></script>
+<script src="search.js?v=24"></script>
+<script src="app.js?v=24"></script>
+<script src="photo.js?v=24"></script>
+<script src="map.js?v=24"></script>
 </body>
 </html>

@@ -349,7 +349,7 @@
     var tab = $('#tab-map');
     if (!tab || !tab.classList.contains('on') || !map || !imgEl) return;
     var wrap = $('#mapWrap'), cv = $('#mapCanvas');
-    var W = Math.max(200, wrap.clientWidth), H = Math.round(Math.min(Math.max(W * 0.95, 300), Math.max(300, window.innerHeight * 0.58)));
+    var W = Math.max(200, wrap.clientWidth), H = Math.round(Math.min(Math.max(W * 1.35, 360), Math.max(360, window.innerHeight * 0.74)));
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
       cv.width = Math.round(W * dpr);
