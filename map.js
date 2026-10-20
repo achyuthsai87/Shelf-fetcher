@@ -323,6 +323,7 @@
   }
 
   function setMapFromBlob(blob) {
+    if (window.ShelfBackup) window.ShelfBackup.snapshot('Before replacing the map photo');
     var finish = function (src, w, h) {
       var k = Math.min(1, 1400 / Math.max(w, h));
       var c = document.createElement('canvas');
@@ -639,6 +640,7 @@
     window.addEventListener('resize', schedule);
     $('#mapPickBtn').addEventListener('click', function () { $('#mapFile').click(); });
     function loadStarter() {
+      if (window.ShelfBackup) window.ShelfBackup.snapshot('Before reloading the layout');
       Promise.all([fetch('./starter-layout.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
         var fr = new FileReader();
         fr.onload = function () {
@@ -702,6 +704,7 @@
       }
       b.removeAttribute('data-armed');
       b.textContent = 'Remove map';
+      if (window.ShelfBackup) window.ShelfBackup.snapshot('Before removing the map');
       try { localStorage.removeItem(KEY); } catch (e) {}
       map = null; imgEl = null; sel = null; edit = false; savedView = null;
       refresh();

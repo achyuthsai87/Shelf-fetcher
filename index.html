@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=25">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -105,6 +105,17 @@
       <h2>App update</h2>
       <p id="verNote">Tap to fetch the newest version. Your bottles and map are kept.</p>
       <button class="btn ghost block" id="updateBtn" type="button">Update app</button>
+    </div>
+    <div class="glass card">
+      <h2>Back up everything</h2>
+      <p>Saves your bottles, the map and every section into one file. Tap Save backup, then pick Google Drive (or Files, Mail) in the share sheet. To get it all back, tap Restore and choose that file from Drive.</p>
+      <div class="mapactions"><button class="btn" id="saveBackupBtn" type="button">Save backup</button><button class="btn ghost" id="restoreBackupBtn" type="button">Restore</button></div>
+      <input id="restoreFile" type="file" accept=".json,application/json" hidden>
+    </div>
+    <div class="glass card">
+      <h2>Automatic backups</h2>
+      <p>Made before anything risky, like reloading the layout, replacing the map or importing a list, and about once a day. The newest 6 are kept on this phone.</p>
+      <div id="autoBackups"></div>
     </div>
     <div class="glass card">
       <h2>Where your list lives</h2>
@@ -204,9 +215,10 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=25"></script>
-<script src="app.js?v=25"></script>
-<script src="photo.js?v=25"></script>
-<script src="map.js?v=25"></script>
+<script src="search.js?v=26"></script>
+<script src="app.js?v=26"></script>
+<script src="photo.js?v=26"></script>
+<script src="map.js?v=26"></script>
+<script src="backup.js?v=26"></script>
 </body>
 </html>

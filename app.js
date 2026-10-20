@@ -305,6 +305,7 @@
       added++;
     });
     var skipped = same;
+    if (window.ShelfBackup && (fresh.length || updated)) window.ShelfBackup.snapshot('Before importing a list');
     var prev = items.slice();
     items = items.concat(fresh);
     if (!saveLocal()) {
@@ -444,7 +445,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v25';
+  var APP_VERSION = 'v26';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
