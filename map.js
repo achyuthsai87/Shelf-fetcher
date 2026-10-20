@@ -210,6 +210,26 @@
         faces.forEach(function (f) {
           var A = f.c[0], B = f.c[1];
           var pts = [P(A[0], A[1], 0), P(B[0], B[1], 0), P(B[0], B[1], Z), P(A[0], A[1], Z)];
+          /* Only faces that look toward the camera are drawn, so from one side you never see the shelves of the other side. */
+          var ar = 0, ai;
+          for (ai = 0; ai < 4; ai++) { var pa = pts[ai], pb = pts[(ai + 1) % 4]; ar += pa.X * pb.Y - pb.X * pa.Y; }
+          if (ar <= 0) return;
+          /* A face pressed against a neighbouring box (the divider, or the parts of one box) is inside, not a side. */
+          var inner = false;
+          zones.forEach(function (q) {
+            if (inner || q === z || zoneH(q) < Z - 0.002) return;
+            var qx1 = q.x + q.w, qy1 = q.y + q.h, tol = 0.004;
+            if (A[1] === B[1]) {
+              var yy = A[1];
+              if (Math.min(x1, qx1) - Math.max(x0, q.x) > 0.5 * Math.min(z.w, q.w) &&
+                ((yy === y0 && Math.abs(qy1 - yy) < tol) || (yy === y1 && Math.abs(q.y - yy) < tol))) inner = true;
+            } else {
+              var xx = A[0];
+              if (Math.min(y1, qy1) - Math.max(y0, q.y) > 0.5 * Math.min(z.h, q.h) &&
+                ((xx === x0 && Math.abs(qx1 - xx) < tol) || (xx === x1 && Math.abs(q.x - xx) < tol))) inner = true;
+            }
+          });
+          if (inner) return;
           ctx.fillStyle = f.col;
           poly(ctx, pts);
           ctx.fill();
@@ -290,6 +310,7 @@
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
   var focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
+  var tapStart = null, lastTapUp = 0;
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -524,6 +545,31 @@
     var r = $('#mapCanvas').getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
+  /* The camera as drawScene builds it, so a turn can keep the spot you are looking at in place. */
+  function buildProj(zm, px, py) {
+    var cv = $('#mapCanvas'), zmax = 0.2;
+    map.zones.forEach(function (q) { zmax = Math.max(zmax, zoneH(q)); });
+    return makeProj(cv.clientWidth, cv.clientHeight, imgEl.naturalWidth / imgEl.naturalHeight, yaw, elev, zmax, zm, px, py);
+  }
+  function floorUV(P, X, Y) {
+    var u = 0.5, v = 0.5, e = 0.001, i;
+    for (i = 0; i < 12; i++) {
+      var f = P(u, v, 0), fu = P(u + e, v, 0), fv = P(u, v + e, 0);
+      var a = (fu.X - f.X) / e, c = (fu.Y - f.Y) / e, b = (fv.X - f.X) / e, d = (fv.Y - f.Y) / e;
+      var det = a * d - b * c;
+      if (Math.abs(det) < 1e-9) break;
+      var dx = X - f.X, dy = Y - f.Y;
+      u += (d * dx - b * dy) / det;
+      v += (-c * dx + a * dy) / det;
+    }
+    return { u: u, v: v };
+  }
+  function turnBy(dyaw) {
+    var cv = $('#mapCanvas'), cx = cv.clientWidth / 2, cy = cv.clientHeight / 2, uv = null;
+    if (zoom > 1 && map && imgEl) uv = floorUV(buildProj(zoom, panX, panY), cx, cy);
+    yaw = clamp(yaw + dyaw, -1.3, 1.3);
+    if (uv) { var q = buildProj(zoom, panX, panY)(uv.u, uv.v, 0); panX += cx - q.X; panY += cy - q.Y; }
+  }
   function setZoom(nz, fx, fy) {
     nz = Math.max(1, Math.min(6, nz));
     var cv = $('#mapCanvas'), cx = cv.clientWidth / 2, cy = cv.clientHeight / 2;
@@ -546,16 +592,11 @@
       if (drawing && drawing.zone && drawing.orig) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; }
       drawing = null;
       pinch = { d: pinchDist(), z: zoom, mid: pinchMid() };
+      lastTapUp = 0; tapStart = null;
       fast = true;
       return;
     }
-    if (!edit) {
-      var now = Date.now();
-      if (now - lastTap < 300) { setZoom(zoom > 1.2 ? 1 : 2.5, p.x, p.y); lastTap = 0; return; }
-      lastTap = now;
-    }
-    if (!edit && zoom > 1) { drawing = { mode: 'pan', x: p.x, y: p.y, moved: false }; fast = true; return; }
-    if (!edit) { drawing = { mode: 'orbit', x: p.x, moved: false }; fast = true; return; }
+    if (!edit) { tapStart = { t: Date.now(), x: p.x, y: p.y }; drawing = { mode: 'orbit', x: p.x, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
     var uv = unproject(p.x, p.y), hit = null, mode = 'draw', i, z;
     for (i = map.zones.length - 1; i >= 0; i--) {
       z = map.zones[i];
@@ -596,8 +637,8 @@
     }
     if (drawing.mode === 'orbit') {
       var dx = p.x - drawing.x;
-      if (Math.abs(dx) > 1) drawing.moved = true;
-      yaw = clamp(yaw + dx * 0.008, -1.3, 1.3);
+      if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 8) drawing.moved = true;
+      turnBy(dx * 0.008);
       drawing.x = p.x;
       schedule();
       return;
@@ -628,7 +669,15 @@
     var d = drawing;
     drawing = null;
     fast = false;
-    if (d.mode === 'orbit' || d.mode === 'pan') { schedule(); return; }
+    if (d.mode === 'orbit' || d.mode === 'pan') {
+      var now = Date.now();
+      if (!d.moved && tapStart && now - tapStart.t < 300) {
+        if (now - lastTapUp < 350) { setZoom(zoom > 1.2 ? 1 : 2.5, tapStart.x, tapStart.y); lastTapUp = 0; return; }
+        lastTapUp = now;
+      } else lastTapUp = 0;
+      schedule();
+      return;
+    }
     if (d.mode === 'draw') {
       if (d.moved && d.rect.w > 0.03 && d.rect.h > 0.03) openZone(null, d.rect);
     } else if (!d.moved) {
@@ -747,6 +796,7 @@
   }
 
   root.ShelfMap = {
+    debug: function () { return { zoom: zoom, panX: panX, panY: panY, yaw: yaw, pointers: Object.keys(pointers).length }; },
     has: function () { return !!(map && map.zones && map.zones.length); },
     zoneNames: function () { return map && map.zones ? map.zones.map(function (z) { return z.name; }) : []; },
     zoneInfo: function (name) {
