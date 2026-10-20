@@ -291,7 +291,7 @@
   }
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
-  var rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
+  var tapStart = null, lastTapUp = 0, rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -508,6 +508,12 @@
     var r = $('#mapCanvas').getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
+  function clampPan() {
+    var cv = $('#mapCanvas'), w = cv.clientWidth, h = cv.clientHeight;
+    var mx = (zoom - 1) * w / 2 + w * 0.2, my = (zoom - 1) * h / 2 + h * 0.2;
+    panX = Math.max(-mx, Math.min(mx, panX));
+    panY = Math.max(-my, Math.min(my, panY));
+  }
   function setZoom(nz, fx, fy) {
     nz = Math.max(1, Math.min(6, nz));
     var cv = $('#mapCanvas'), cx = cv.clientWidth / 2, cy = cv.clientHeight / 2;
@@ -517,6 +523,7 @@
     panY = fy - cy - (fy - cy - panY) * f;
     zoom = nz;
     if (zoom === 1) { panX = 0; panY = 0; }
+    clampPan();
     schedule();
   }
   function pinchDist() { var k = Object.keys(pointers); return Math.hypot(pointers[k[0]].x - pointers[k[1]].x, pointers[k[0]].y - pointers[k[1]].y) || 1; }
@@ -530,16 +537,13 @@
       if (drawing && drawing.zone && drawing.orig) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; }
       drawing = null;
       pinch = { d: pinchDist(), z: zoom, mid: pinchMid() };
+      lastTap = 0; tapStart = null;
       fast = true;
       return;
     }
-    if (!edit) {
-      var now = Date.now();
-      if (now - lastTap < 300) { setZoom(zoom > 1.2 ? 1 : 2.5, p.x, p.y); lastTap = 0; return; }
-      lastTap = now;
-    }
-    if (!edit && zoom > 1) { drawing = { mode: 'pan', x: p.x, y: p.y, moved: false }; fast = true; return; }
-    if (!edit) { drawing = { mode: 'orbit', x: p.x, moved: false }; fast = true; return; }
+    if (!edit) tapStart = { t: Date.now(), x: p.x, y: p.y };
+    if (!edit && zoom > 1) { drawing = { mode: 'pan', x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
+    if (!edit) { drawing = { mode: 'orbit', x: p.x, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
     var uv = unproject(p.x, p.y), hit = null, mode = 'draw', i, z;
     for (i = map.zones.length - 1; i >= 0; i--) {
       z = map.zones[i];
@@ -567,6 +571,7 @@
       panY = mid.y - cy - (mid.y - cy - panY) * f;
       zoom = nz;
       if (zoom === 1) { panX = 0; panY = 0; }
+      clampPan();
       schedule();
       return;
     }
@@ -574,13 +579,15 @@
     var p = pt(e);
     if (drawing.mode === 'pan') {
       panX += p.x - drawing.x; panY += p.y - drawing.y;
+      if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 8) drawing.moved = true;
       drawing.x = p.x; drawing.y = p.y;
+      clampPan();
       schedule();
       return;
     }
     if (drawing.mode === 'orbit') {
       var dx = p.x - drawing.x;
-      if (Math.abs(dx) > 1) drawing.moved = true;
+      if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 8) drawing.moved = true;
       yaw = clamp(yaw + dx * 0.008, -1.3, 1.3);
       drawing.x = p.x;
       schedule();
@@ -612,7 +619,15 @@
     var d = drawing;
     drawing = null;
     fast = false;
-    if (d.mode === 'orbit' || d.mode === 'pan') { schedule(); return; }
+    if (d.mode === 'orbit' || d.mode === 'pan') {
+      var now = Date.now();
+      if (!d.moved && tapStart && now - tapStart.t < 300) {
+        if (now - lastTapUp < 350) { setZoom(zoom > 1.2 ? 1 : 2.5, tapStart.x, tapStart.y); lastTapUp = 0; return; }
+        lastTapUp = now;
+      } else lastTapUp = 0;
+      schedule();
+      return;
+    }
     if (d.mode === 'draw') {
       if (d.moved && d.rect.w > 0.03 && d.rect.h > 0.03) openZone(null, d.rect);
     } else if (!d.moved) {
@@ -732,6 +747,7 @@
   }
 
   root.ShelfMap = {
+    debug: function () { return { zoom: zoom, panX: panX, panY: panY, pointers: Object.keys(pointers).length, pinch: !!pinch, rot: rot, edit: edit }; },
     has: function () { return !!(map && map.zones && map.zones.length); },
     zoneNames: function () { return map && map.zones ? map.zones.map(function (z) { return z.name; }) : []; },
     zoneInfo: function (name) {
