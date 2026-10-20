@@ -43,11 +43,10 @@
     });
     var m = 14;
     var k = Math.min((W - 2 * m) / (maxX - minX), (H - 2 * m) / (maxY - minY));
-    var zz = zoom || 1, zd = Math.min(zz, 2.2), zs = zz / zd;
-    k *= zs;
+    k *= zoom || 1;
     var ox = W / 2 - k * (minX + maxX) / 2 + (panX || 0), oy = H / 2 + k * (minY + maxY) / 2 + (panY || 0);
     return function (u, v, z) {
-      var r = raw(u, v, z || 0), s = 1 / (D / zd - r.t);
+      var r = raw(u, v, z || 0), s = 1 / (D - r.t);
       return { X: ox + r.sx * s * k, Y: oy - r.sy * s * k, t: r.t };
     };
   }
@@ -244,9 +243,8 @@
         ctx.lineWidth = sel ? 3 : 1;
         ctx.stroke();
         var tc = P((x0 + x1) / 2, (y0 + y1) / 2, Z);
-        var bx = top.map(function (p) { return p.X; }), by = top.map(function (p) { return p.Y; });
-        var wpx = Math.max.apply(null, bx) - Math.min.apply(null, bx), hpx = Math.max.apply(null, by) - Math.min.apply(null, by);
-        labels.push({ text: z.name || 'Unnamed', X: tc.X, Y: tc.Y, w: wpx, h: hpx });
+        var wpx = Math.max(Math.abs(top[1].X - top[0].X), Math.abs(top[2].X - top[3].X));
+        labels.push({ text: z.name || 'Unnamed', X: tc.X, Y: tc.Y, w: wpx });
         if (sel) {
           var lz = levelZ(z, st.selLevel || 0, st.topFirst);
           var dp = P((x0 + x1) / 2, (y0 + y1) / 2, lz);
@@ -261,9 +259,8 @@
     labels.forEach(function (l) {
       var text = l.text, short = text.length <= 3;
       if (short) {
-        var room = l.h == null ? l.w : Math.min(l.w, l.h * 1.4);
-        if (room < 9) return;
-        ctx.font = '700 ' + Math.max(9, Math.min(13, room * 0.6)) + 'px -apple-system, "Segoe UI", Roboto, sans-serif';
+        if (l.w < 8) return;
+        ctx.font = '700 ' + Math.max(9, Math.min(13, l.w * 0.85)) + 'px -apple-system, "Segoe UI", Roboto, sans-serif';
       } else {
         if (l.w < 44) return;
         ctx.font = '600 12px -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -292,7 +289,7 @@
   }
   var KEY = 'shelf-finder-map-v1';
   var map = null, imgEl = null;
-  var loadStarterFn = null, tapStart = null, lastTapUp = 0, rot = false, focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
+  var focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -371,7 +368,7 @@
     var tab = $('#tab-map');
     if (!tab || !tab.classList.contains('on') || !map || !imgEl) return;
     var wrap = $('#mapWrap'), cv = $('#mapCanvas');
-    var W = Math.max(200, wrap.clientWidth), H = rot && !edit ? Math.round(Math.min(W * 1.55, Math.max(380, window.innerHeight * 0.78))) : Math.round(Math.min(Math.max(W * 0.95, 300), Math.max(300, window.innerHeight * 0.58)));
+    var W = Math.max(200, wrap.clientWidth), H = Math.round(Math.min(Math.max(W * 1.25, 380), Math.max(380, window.innerHeight * 0.7)));
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
       cv.width = Math.round(W * dpr);
@@ -384,16 +381,14 @@
     var z = sel ? map.zones.filter(function (q) { return q.id === sel.zoneId; })[0] : null;
     last = drawScene(ctx, W, H, {
       img: imgEl, imgW: imgEl.naturalWidth, imgH: imgEl.naturalHeight, aspect: imgEl.naturalWidth / imgEl.naturalHeight,
-      zones: map.zones, yaw: yaw + (rot && !edit ? -Math.PI / 2 : 0), elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
+      zones: map.zones, yaw: yaw, elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
       zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
       dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast
     });
     if (focusDot && z && last.dot && !edit) {
       focusDot = false;
-      zoom = 2.2; panX = 0; panY = 0;
-      var lz = levelZ(z, sel.level || 0, map.topFirst !== false), dp = buildProj(zoom, 0, 0)(z.x + z.w / 2, z.y + z.h / 2, lz);
-      panX = W / 2 - dp.X; panY = H / 2 - dp.Y;
-      clampPan();
+      var f = 2.2, ccx = W / 2, ccy = H / 2;
+      zoom = f; panX = -(last.dot.X - ccx) * f; panY = -(last.dot.Y - ccy) * f;
       paint();
       return;
     }
@@ -428,7 +423,7 @@
     if (has) {
       $('#mapEditBtn').textContent = edit ? 'Done' : 'Edit sections';
       $('#mapEditHelp').hidden = !edit;
-      $('#mapTilt').disabled = edit; $('#mapTurn').disabled = edit;
+      $('#mapTilt').disabled = edit;
       $('#segTop').setAttribute('aria-pressed', String(map.topFirst !== false));
       $('#segBottom').setAttribute('aria-pressed', String(map.topFirst === false));
       $('#segClean').setAttribute('aria-pressed', String(map.look !== 'photo'));
@@ -440,7 +435,6 @@
           : (map.zones.length ? 'Every section in your list is on the map.' : '');
       }
       $('#mapCv').style.touchAction = 'none';
-      $('#mapNoZones').hidden = edit || !!(map.zones && map.zones.length);
     }
     caption();
     schedule();
@@ -530,48 +524,17 @@
     var r = $('#mapCanvas').getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
-  function clampPan() {
-    var cv = $('#mapCanvas'), w = cv.clientWidth, h = cv.clientHeight;
-    var mx = (zoom - 1) * w / 2 + w * 0.2, my = (zoom - 1) * h / 2 + h * 0.2;
-    panX = Math.max(-mx, Math.min(mx, panX));
-    panY = Math.max(-my, Math.min(my, panY));
-  }
-  /* The camera for a given zoom and pan, the same one drawScene uses. */
-  function buildProj(zm, px, py) {
-    var cv = $('#mapCanvas'), W = cv.clientWidth, H = cv.clientHeight, zmax = 0.2;
-    if (!edit) map.zones.forEach(function (q) { zmax = Math.max(zmax, zoneH(q)); });
-    var yw = edit ? 0 : yaw + (rot ? -Math.PI / 2 : 0), el = edit ? Math.PI / 2 : elev;
-    return makeProj(W, H, imgEl.naturalWidth / imgEl.naturalHeight, yw, el, edit ? 0.02 : zmax, zm, px, py);
-  }
-  /* The spot on the floor (0..1) that sits under a screen point. */
-  function floorUV(P, X, Y) {
-    var u = 0.5, v = 0.5, e = 0.001, i;
-    for (i = 0; i < 12; i++) {
-      var f = P(u, v, 0), fu = P(u + e, v, 0), fv = P(u, v + e, 0);
-      var a = (fu.X - f.X) / e, c = (fu.Y - f.Y) / e, b = (fv.X - f.X) / e, d = (fv.Y - f.Y) / e;
-      var det = a * d - b * c;
-      if (Math.abs(det) < 1e-9) break;
-      var dx = X - f.X, dy = Y - f.Y;
-      u += (d * dx - b * dy) / det;
-      v += (-c * dx + a * dy) / det;
-    }
-    return { u: u, v: v };
-  }
-  /* Move the camera closer or further while keeping the floor spot under (fx, fy) in place. */
-  function zoomAt(nz, fx, fy) {
-    if (!map || !imgEl) return;
+  function setZoom(nz, fx, fy) {
     nz = Math.max(1, Math.min(6, nz));
-    var cv = $('#mapCanvas');
-    if (fx == null) { fx = cv.clientWidth / 2; fy = cv.clientHeight / 2; }
-    var uv = floorUV(buildProj(zoom, panX, panY), fx, fy);
+    var cv = $('#mapCanvas'), cx = cv.clientWidth / 2, cy = cv.clientHeight / 2;
+    if (fx == null) { fx = cx; fy = cy; }
+    var f = nz / zoom;
+    panX = fx - cx - (fx - cx - panX) * f;
+    panY = fy - cy - (fy - cy - panY) * f;
     zoom = nz;
-    var q = buildProj(zoom, panX, panY)(uv.u, uv.v, 0);
-    panX += fx - q.X; panY += fy - q.Y;
     if (zoom === 1) { panX = 0; panY = 0; }
-    clampPan();
     schedule();
   }
-  function setZoom(nz, fx, fy) { zoomAt(nz, fx, fy); }
   function pinchDist() { var k = Object.keys(pointers); return Math.hypot(pointers[k[0]].x - pointers[k[1]].x, pointers[k[0]].y - pointers[k[1]].y) || 1; }
   function pinchMid() { var k = Object.keys(pointers); return { x: (pointers[k[0]].x + pointers[k[1]].x) / 2, y: (pointers[k[0]].y + pointers[k[1]].y) / 2 }; }
   function onDown(e) {
@@ -583,12 +546,16 @@
       if (drawing && drawing.zone && drawing.orig) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; }
       drawing = null;
       pinch = { d: pinchDist(), z: zoom, mid: pinchMid() };
-      lastTap = 0; tapStart = null;
       fast = true;
       return;
     }
-    if (!edit) tapStart = { t: Date.now(), x: p.x, y: p.y };
-    if (!edit) { drawing = { mode: 'pan', x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
+    if (!edit) {
+      var now = Date.now();
+      if (now - lastTap < 300) { setZoom(zoom > 1.2 ? 1 : 2.5, p.x, p.y); lastTap = 0; return; }
+      lastTap = now;
+    }
+    if (!edit && zoom > 1) { drawing = { mode: 'pan', x: p.x, y: p.y, moved: false }; fast = true; return; }
+    if (!edit) { drawing = { mode: 'orbit', x: p.x, moved: false }; fast = true; return; }
     var uv = unproject(p.x, p.y), hit = null, mode = 'draw', i, z;
     for (i = map.zones.length - 1; i >= 0; i--) {
       z = map.zones[i];
@@ -610,22 +577,26 @@
       var mid = pinchMid();
       panX += mid.x - pinch.mid.x; panY += mid.y - pinch.mid.y;
       pinch.mid = mid;
-      zoomAt(pinch.z * pinchDist() / pinch.d, mid.x, mid.y);
+      var nz = Math.max(1, Math.min(6, pinch.z * pinchDist() / pinch.d)), cv0 = $('#mapCanvas');
+      var f = nz / zoom, cx = cv0.clientWidth / 2, cy = cv0.clientHeight / 2;
+      panX = mid.x - cx - (mid.x - cx - panX) * f;
+      panY = mid.y - cy - (mid.y - cy - panY) * f;
+      zoom = nz;
+      if (zoom === 1) { panX = 0; panY = 0; }
+      schedule();
       return;
     }
     if (!drawing) return;
     var p = pt(e);
     if (drawing.mode === 'pan') {
       panX += p.x - drawing.x; panY += p.y - drawing.y;
-      if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 8) drawing.moved = true;
       drawing.x = p.x; drawing.y = p.y;
-      clampPan();
       schedule();
       return;
     }
     if (drawing.mode === 'orbit') {
       var dx = p.x - drawing.x;
-      if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 8) drawing.moved = true;
+      if (Math.abs(dx) > 1) drawing.moved = true;
       yaw = clamp(yaw + dx * 0.008, -1.3, 1.3);
       drawing.x = p.x;
       schedule();
@@ -657,15 +628,7 @@
     var d = drawing;
     drawing = null;
     fast = false;
-    if (d.mode === 'orbit' || d.mode === 'pan') {
-      var now = Date.now();
-      if (!d.moved && tapStart && now - tapStart.t < 300) {
-        if (now - lastTapUp < 350) { setZoom(zoom > 1.2 ? 1 : 2.5, tapStart.x, tapStart.y); lastTapUp = 0; return; }
-        lastTapUp = now;
-      } else lastTapUp = 0;
-      schedule();
-      return;
-    }
+    if (d.mode === 'orbit' || d.mode === 'pan') { schedule(); return; }
     if (d.mode === 'draw') {
       if (d.moved && d.rect.w > 0.03 && d.rect.h > 0.03) openZone(null, d.rect);
     } else if (!d.moved) {
@@ -679,21 +642,15 @@
   function init() {
     map = loadMap();
     var cv = $('#mapCanvas');
-    try {
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
     cv.addEventListener('pointercancel', function (e) { delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
     cv.addEventListener('wheel', function (e) { if (!map || !imgEl) return; e.preventDefault(); var p = pt(e); setZoom(zoom * Math.exp(-e.deltaY * 0.002), p.x, p.y); }, { passive: false });
-    try { var sr = localStorage.getItem('shelf-finder-maprot'); rot = sr === null ? (window.innerHeight > window.innerWidth) : sr === '1'; } catch (e) { rot = window.innerHeight > window.innerWidth; }
-    function syncRot() { var b = $('#mapRotBtn'); b.setAttribute('aria-pressed', String(rot)); b.textContent = rot ? 'Wide view' : 'Tall view'; }
-    syncRot();
-    $('#mapRotBtn').addEventListener('click', function () { rot = !rot; zoom = 1; panX = 0; panY = 0; try { localStorage.setItem('shelf-finder-maprot', rot ? '1' : '0'); } catch (e) {} syncRot(); focusDot = !!(sel && sel.zoneId); schedule(); });
     $('#mapZoomIn').addEventListener('click', function () { setZoom(zoom * 1.6); });
     $('#mapZoomOut').addEventListener('click', function () { setZoom(zoom / 1.6); });
     window.addEventListener('resize', schedule);
     $('#mapPickBtn').addEventListener('click', function () { $('#mapFile').click(); });
-    loadStarterFn = loadStarter;
     function loadStarter() {
       if (window.ShelfBackup) window.ShelfBackup.snapshot('Before reloading the layout');
       Promise.all([fetch('./starter-layout.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }), fetch('./starter-plan.jpg').then(function (r) { return r.blob(); })]).then(function (res) {
@@ -709,7 +666,6 @@
       }).catch(function () { toast('Could not load the layout. Check your connection.'); });
     }
     $('#mapStarterBtn').addEventListener('click', loadStarter);
-    $('#mapLoadZonesBtn').addEventListener('click', loadStarter);
     $('#mapLayoutBtn').addEventListener('click', function () {
       var b = this;
       if (b.getAttribute('data-armed') !== '1') {
@@ -736,8 +692,7 @@
       if (edit) { savedView = { yaw: yaw, elev: elev }; sel = sel; } else restoreView();
       refresh();
     });
-    $('#mapResetBtn').addEventListener('click', function () { zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI); $('#mapTurn').value = 0; schedule(); });
-    $('#mapTurn').addEventListener('input', function (e) { yaw = parseFloat(e.target.value) * Math.PI / 180; fast = true; schedule(); clearTimeout(init.t2); init.t2 = setTimeout(function () { fast = false; schedule(); }, 180); });
+    $('#mapResetBtn').addEventListener('click', function () { zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI); schedule(); });
     $('#mapTilt').addEventListener('input', function (e) { elev = parseFloat(e.target.value) * Math.PI / 180; fast = true; schedule(); clearTimeout(init.t); init.t = setTimeout(function () { fast = false; schedule(); }, 180); });
     $('#segClean').addEventListener('click', function () { map.look = 'clean'; persist(); refresh(); });
     $('#segPhoto').addEventListener('click', function () { map.look = 'photo'; persist(); refresh(); });
@@ -788,12 +743,10 @@
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
     $('#zoneScrim').addEventListener('mousedown', function (e) { if (e.target === this) closeZone(); });
-    } catch (err) { try { console.error('map wiring', err); } catch (e2) {} }
     loadImage(function () { refresh(); notify(); });
   }
 
   root.ShelfMap = {
-    debug: function () { return { zoom: zoom, panX: panX, panY: panY, pointers: Object.keys(pointers).length, pinch: !!pinch, rot: rot, edit: edit }; },
     has: function () { return !!(map && map.zones && map.zones.length); },
     zoneNames: function () { return map && map.zones ? map.zones.map(function (z) { return z.name; }) : []; },
     zoneInfo: function (name) {
