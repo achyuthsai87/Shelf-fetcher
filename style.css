@@ -446,3 +446,4 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .askbtns { display: grid; gap: 10px; margin-top: 14px; }
 
 .actions .price { margin-right: auto; align-self: center; padding-left: 8px; font-weight: 600; color: var(--ink); }
+.loc:not(.none) { cursor: pointer; }

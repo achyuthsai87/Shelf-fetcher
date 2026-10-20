@@ -165,7 +165,7 @@
         (meta ? '<p class="meta">' + hl(meta) + '</p>' : '') +
         (it.notes ? '<p class="notes">' + hl(it.notes) + '</p>' : '') +
         '</div>' + loc + '</div>' +
-        '<div class="actions">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + (window.ShelfMap && window.ShelfMap.has() ? '<button class="link" type="button" data-act="map">Show on map</button>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
+        '<div class="actions">' + (fmtPrice(it.price) ? '<span class="price">' + esc(fmtPrice(it.price)) + '</span>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
         '</li>';
     }).join('');
     if (res.length > shown.length) {
@@ -392,7 +392,11 @@
     var id = card.getAttribute('data-id');
     var it = items.find(function (x) { return x.id === id; });
     if (!it) return;
-    if (!b) { openSheet(it); return; }
+    if (!b) {
+      var lb = e.target.closest('.loc');
+      if (lb && !lb.classList.contains('none') && window.ShelfMap && window.ShelfMap.has()) { window.ShelfMap.show(it); return; }
+      openSheet(it); return;
+    }
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
     if (b.getAttribute('data-act') === 'map') { window.ShelfMap.show(it); return; }
     if (b.getAttribute('data-armed') !== '1') {
@@ -469,7 +473,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v42';
+  var APP_VERSION = 'v44';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './map.js', './manifest.webmanifest', './starter-layout.json', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
