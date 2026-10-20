@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=54">
+<link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -215,10 +215,10 @@
   <form class="sheet" id="zoneForm" autocomplete="off">
     <h2 id="zoneTitle">Name this section</h2>
     <div class="field full"><label for="zName">Aisle or section name</label><input id="zName" list="dl-zone" placeholder="Aisle 3"></div>
-    <div class="field full"><label>Type</label><div class="seg" id="zKind"><button type="button" data-kind="tall" aria-pressed="true">Shelves</button><button type="button" data-kind="low" aria-pressed="false">Counter</button><button type="button" data-kind="flat" aria-pressed="false">Floor marker</button></div></div>
+    <div class="field full"><label>Type</label><div class="seg" id="zKind"><button type="button" data-kind="tall" aria-pressed="true">Shelves</button><button type="button" data-kind="low" aria-pressed="false">Counter</button><button type="button" data-kind="flat" aria-pressed="false">Floor marker</button><button type="button" data-kind="cooler" aria-pressed="false">Cooler</button><button type="button" data-kind="freezer" aria-pressed="false">Freezer</button></div></div>
     <div class="field full" id="zShelvesField"><label for="zShelves">Number of shelves</label><input id="zShelves" type="number" min="1" max="12" inputmode="numeric" value="5"></div>
     <div class="field full" id="zHeightField"><label>Height</label><div class="seg" id="zHeight"><button type="button" data-hs="0.7" aria-pressed="false">Short</button><button type="button" data-hs="1" aria-pressed="true">Normal</button><button type="button" data-hs="1.35" aria-pressed="false">Tall</button></div></div>
-    <div class="field full" id="zSplitBox" hidden><label for="zSplitN">Split this box into equal parts</label><div class="inrow"><input id="zSplitN" type="number" min="2" max="12" inputmode="numeric" value="3"><button class="btn ghost" id="zSplitX" type="button">Left to right</button><button class="btn ghost" id="zSplitY" type="button">Top to bottom</button></div></div>
+    <div class="field full" id="zSplitBox" hidden><label for="zSplitN">Split into equal parts (how many, first number)</label><div class="inrow"><input id="zSplitN" type="number" min="2" max="12" inputmode="numeric" value="3" aria-label="Number of parts"><input id="zSplitStart" type="number" min="0" inputmode="numeric" value="1" aria-label="First number" title="Number the first part starts at"><button class="btn ghost" id="zSplitX" type="button">Left to right</button><button class="btn ghost" id="zSplitY" type="button">Top to bottom</button></div></div>
     <p class="err" id="zoneErr" hidden></p>
     <div class="sheet-actions">
       <button class="btn grow" type="submit">Save</button>
@@ -256,11 +256,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=54"></script>
-<script src="app.js?v=54"></script>
-<script src="photo.js?v=54"></script>
-<script src="scan.js?v=54"></script>
-<script src="map.js?v=54"></script>
-<script src="backup.js?v=54"></script>
+<script src="search.js?v=55"></script>
+<script src="app.js?v=55"></script>
+<script src="photo.js?v=55"></script>
+<script src="scan.js?v=55"></script>
+<script src="map.js?v=55"></script>
+<script src="backup.js?v=55"></script>
 </body>
 </html>

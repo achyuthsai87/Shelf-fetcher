@@ -124,6 +124,12 @@
     return zones;
   }
 
+  /* Coolers look icy teal and freezers pale blue, so they stand out from the shelves. */
+  function kindPal(kind, dark, base) {
+    if (kind === 'cooler') return dark ? { top: 'rgba(105,205,230,0.92)', a: 'rgba(60,150,185,0.96)', b: 'rgba(42,120,155,0.96)' } : { top: 'rgba(80,190,215,0.94)', a: 'rgba(40,140,175,0.96)', b: 'rgba(28,112,150,0.96)' };
+    if (kind === 'freezer') return dark ? { top: 'rgba(200,228,255,0.92)', a: 'rgba(130,170,225,0.96)', b: 'rgba(100,140,200,0.96)' } : { top: 'rgba(176,214,250,0.96)', a: 'rgba(104,150,215,0.97)', b: 'rgba(80,124,190,0.97)' };
+    return base;
+  }
   /* st: {img, imgW, imgH, aspect, zones, yaw, elev, edit, clean, topFirst, selZoneId, selLevel, draft, dark, fast} */
   function drawScene(ctx, W, H, st) {
     var zones = st.zones || [];
@@ -194,13 +200,13 @@
       }).sort(function (p, q) { return p.t - q.t; });
 
       order.forEach(function (o) {
-        var z = o.z, Z = zoneH(z), n = zoneN(z), sel = st.selZoneId === z.id;
+        var z = o.z, Z = zoneH(z), n = zoneN(z), sel = st.selZoneId === z.id, zp = kindPal(z.kind, st.dark, pal);
         var x0 = z.x, x1 = z.x + z.w, y0 = z.y, y1 = z.y + z.h;
         var faces = [
-          { c: [[x0, y0], [x1, y0]], col: pal.a, nx: 0, ny: 1 },
-          { c: [[x1, y1], [x0, y1]], col: pal.a, nx: 0, ny: -1 },
-          { c: [[x0, y1], [x0, y0]], col: pal.b, nx: -1, ny: 0 },
-          { c: [[x1, y0], [x1, y1]], col: pal.b, nx: 1, ny: 0 }
+          { c: [[x0, y0], [x1, y0]], col: zp.a, nx: 0, ny: 1 },
+          { c: [[x1, y1], [x0, y1]], col: zp.a, nx: 0, ny: -1 },
+          { c: [[x0, y1], [x0, y0]], col: zp.b, nx: -1, ny: 0 },
+          { c: [[x1, y0], [x1, y1]], col: zp.b, nx: 1, ny: 0 }
         ].map(function (f) {
           var m = P((f.c[0][0] + f.c[1][0]) / 2, (f.c[0][1] + f.c[1][1]) / 2, Z / 2);
           f.t = m.t;
@@ -269,7 +275,7 @@
         });
 
         var top = [P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)];
-        ctx.fillStyle = sel ? pal.hiTop : pal.top;
+        ctx.fillStyle = sel ? pal.hiTop : zp.top;
         poly(ctx, top);
         ctx.fill();
         ctx.strokeStyle = sel ? pal.hi : pal.edge;
@@ -336,9 +342,11 @@
     try { var a = JSON.parse(localStorage.getItem(KEY2) || '[]'); return Array.isArray(a) ? a.filter(function (m) { return m && m.id; }) : []; } catch (e) { return []; }
   }
   function saveExtras() { try { localStorage.setItem(KEY2, JSON.stringify(extras)); return true; } catch (e) { return false; } }
+  var coldSet = [];
+  function calcCold(m) { coldSet = m && m.zones ? m.zones.filter(function (z) { return z.kind === 'cooler' || z.kind === 'freezer'; }).map(function (z) { return String(z.name).trim().toLowerCase(); }) : []; }
   function persist() {
     try {
-      if (cur === 'main') localStorage.setItem(KEY, JSON.stringify(map));
+      if (cur === 'main') { localStorage.setItem(KEY, JSON.stringify(map)); calcCold(map); }
       else {
         var i = extras.findIndex(function (m) { return m.id === cur; });
         if (i >= 0) extras[i] = map;
@@ -587,9 +595,10 @@
     if (!(n >= 2 && n <= 12)) { $('#zoneErr').textContent = 'Choose 2 to 12 parts.'; $('#zoneErr').hidden = false; return; }
     if (window.ShelfBackup) window.ShelfBackup.snapshot('Before splitting a section');
     var sh = Math.round(parseFloat($('#zShelves').value)); if (!(sh >= 1 && sh <= 12)) sh = z.shelves || 5;
+    var start = Math.round(parseFloat($('#zSplitStart').value)); if (!(start >= 0)) start = 1;
     var base = String(z.name || '').trim(), letters = /\d$/.test(base), parts = [], i;
     for (i = 0; i < n; i++) {
-      var nm = letters ? base + String.fromCharCode(97 + i) : base + (i + 1);
+      var nm = letters ? base + String.fromCharCode(97 + i) : base + (start + i);
       var r = dir === 'x' ? { x: z.x + z.w * i / n, y: z.y, w: z.w / n, h: z.h } : { x: z.x, y: z.y + z.h * i / n, w: z.w, h: z.h / n };
       parts.push({ id: newId(), name: nm, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs });
     }
@@ -604,7 +613,7 @@
   function setKind(k) {
     zoneKind = k;
     Array.prototype.forEach.call(document.querySelectorAll('#zKind [data-kind]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-kind') === k)); });
-    $('#zShelvesField').hidden = k !== 'tall';
+    $('#zShelvesField').hidden = !(k === 'tall' || k === 'cooler' || k === 'freezer');
     $('#zHeightField').hidden = k === 'flat';
   }
   function closeZone() { $('#zoneScrim').hidden = true; zoneEditing = null; openZone.rect = null; }
@@ -784,7 +793,7 @@
 
   function init() {
     extras = loadExtras(); cur = 'main';
-    map = loadMap();
+    map = loadMap(); calcCold(map);
     var cv = $('#mapCanvas');
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
@@ -914,6 +923,7 @@
 
   root.ShelfMap = {
     debug: function () { return { zoom: zoom, panX: panX, panY: panY, yaw: yaw, pointers: Object.keys(pointers).length }; },
+    coldNames: function () { return coldSet; },
     maps: function () { return [{ id: 'main', name: 'Store' }].concat(extras.map(function (m) { return { id: m.id, name: m.name || 'Map' }; })); },
     has: function (id) {
       id = id || 'main';
@@ -924,7 +934,7 @@
     zoneNames: function (id) { var m = this.mapOf(id || 'main'); return m && m.zones ? m.zones.map(function (z) { return z.name; }) : []; },
     zoneInfo: function (name, id) {
       var m = this.mapOf(id || 'main'), z = m && m.zones ? findZone(m.zones, name) : null;
-      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false } : null;
+      return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false, kind: z.kind || 'tall' } : null;
     },
     onShow: function () { refresh(); },
     show: function (it, id) {

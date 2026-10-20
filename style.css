@@ -500,3 +500,9 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .scanrow .btn { flex: none; }
 .scanrow .scanpick { flex: 1; text-align: center; }
 .linkrow { display: block; width: 100%; text-align: left; border: 0; border-radius: 12px; background: var(--chip); padding: 10px 12px; margin: 6px 0; font-size: 15px; }
+
+#zKind { flex-wrap: wrap; }
+#zKind button { min-width: 30%; }
+#zSplitBox .inrow input { width: 64px; flex: none; }
+#zSplitBox .inrow { flex-wrap: wrap; }
+#zSplitBox .inrow .btn { flex: 1 1 40%; }

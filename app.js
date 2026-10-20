@@ -90,6 +90,9 @@
   function qtyNum(it) { return /^-?\d+$/.test(String(it.qty || '').trim()) ? parseInt(it.qty, 10) : null; }
   function stockState(it) { var n = qtyNum(it); if (n === null) return ''; return n <= 0 ? 'out' : (n <= lowAt() ? 'low' : 'ok'); }
   function hasOtherPlace(it) { return (it.places || []).some(function (p) { return p.section || p.shelf; }); }
+  function coldSet() { var a = window.ShelfMap && window.ShelfMap.coldNames ? window.ShelfMap.coldNames() : [], o = {}; a.forEach(function (n) { o[n] = 1; }); return o; }
+  var coldCache = {};
+  function isCold(it) { return !!(it.section && coldCache[it.section.toLowerCase()]); }
   function needsRestock(it) { var st = stockState(it); return hasOtherPlace(it) && (!it.section || st === 'out' || st === 'low'); }
   function filtered() {
     var pool = items.filter(function (it) {
@@ -97,6 +100,7 @@
       if (noSpot && (it.section || it.shelf || it.places.length)) return false;
       if (stockF === 'low' && !(stockState(it) === 'out' || stockState(it) === 'low')) return false;
       if (stockF === 'restock' && !needsRestock(it)) return false;
+      if (stockF === 'cold' && !isCold(it)) return false;
       return true;
     });
     if (tokens.length) return window.ShelfSearch.run(pool, q).map(function (r) { return r.it; });
@@ -124,7 +128,9 @@
     var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
     if (typeF && !counts[typeF]) typeF = '';
     if (stockF === 'low' && !items.some(function (i) { var st = stockState(i); return st === 'out' || st === 'low'; })) stockF = '';
+    coldCache = coldSet();
     if (stockF === 'restock' && !items.some(needsRestock)) stockF = '';
+    if (stockF === 'cold' && !items.some(isCold)) stockF = '';
     var h = '';
     if (keys.length) {
       var ns = items.filter(function (i) { return !i.section && !i.shelf && !i.places.length; }).length;
@@ -133,6 +139,8 @@
       var nl = items.filter(function (i) { var st = stockState(i); return st === 'out' || st === 'low'; }).length, nr = items.filter(needsRestock).length;
       if (nl) h += '<button class="chip" type="button" data-stock="low" aria-pressed="' + (stockF === 'low') + '">Low or out <span>' + nl + '</span></button>';
       if (nr) h += '<button class="chip" type="button" data-stock="restock" aria-pressed="' + (stockF === 'restock') + '">Restock <span>' + nr + '</span></button>';
+      var nc = items.filter(isCold).length;
+      if (nc) h += '<button class="chip" type="button" data-stock="cold" aria-pressed="' + (stockF === 'cold') + '">Cold <span>' + nc + '</span></button>';
       keys.forEach(function (k) {
         h += '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (typeF === k && !noSpot && !stockF) + '">' + esc(labels[k]) + ' <span>' + counts[k] + '</span></button>';
       });
@@ -682,7 +690,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v54';
+  var APP_VERSION = 'v55';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
