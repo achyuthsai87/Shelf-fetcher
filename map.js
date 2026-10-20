@@ -257,8 +257,14 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     labels.forEach(function (l) {
-      if (l.w < 44) return;
-      var text = l.text;
+      var text = l.text, short = text.length <= 3;
+      if (short) {
+        if (l.w < 8) return;
+        ctx.font = '700 ' + Math.max(9, Math.min(13, l.w * 0.85)) + 'px -apple-system, "Segoe UI", Roboto, sans-serif';
+      } else {
+        if (l.w < 44) return;
+        ctx.font = '600 12px -apple-system, "Segoe UI", Roboto, sans-serif';
+      }
       while (text.length > 3 && ctx.measureText(text).width > l.w - 6) text = text.slice(0, -2);
       if (text !== l.text) text = text.trim() + '…';
       ctx.lineWidth = 3;
