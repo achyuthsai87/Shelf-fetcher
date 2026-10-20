@@ -1,0 +1,34 @@
+Shelf Finder
+Copyright (c) 2026 Sai (GitHub: achyuthsai87). All rights reserved.
+
+This source code and everything in this repository that was written for Shelf Finder
+(the app code, design, store layout, plan picture, icons and text) is proprietary.
+The code is public so it can be viewed and so the hosted app can run. Being public is
+not a license.
+
+You MAY:
+  - Open and use the hosted app at https://achyuthsai87.github.io/Shelf-fetcher/
+    for your own use.
+  - View the source code and, on GitHub, fork the repository as GitHub's Terms of
+    Service allow, for viewing and for suggesting changes to this project.
+
+You MAY NOT, without written permission from the copyright holder:
+  - Copy, reproduce, modify, adapt or create derivative works of the code or design.
+  - Redistribute, sublicense, host, publish or package it, in whole or in part, as
+    your own app or service, including on any app store (Apple App Store, Google
+    Play or similar), website or marketplace.
+  - Sell, rent, lease, charge for access to, or otherwise commercially use it or any
+    copy or derivative of it.
+  - Remove or change this notice.
+
+To ask for permission, contact the copyright holder through the GitHub account
+achyuthsai87.
+
+Third-party components in the vendor/ folder (Tesseract.js, PDF.js and ZXing) are not
+covered by this notice. They are used under their own open-source licenses, which are
+included in each folder, and those licenses continue to apply to them.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.

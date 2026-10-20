@@ -27,3 +27,6 @@ Photos are never saved, uploaded or cached. A picture exists only in memory whil
 
 ## Map privacy
 The store plan photo and the sections you trace are saved on this phone only (not in any account). *Remove map* in the Map tab deletes them. Bottle photos used in Find by photo are still never saved.
+
+## License
+Copyright (c) 2026 Sai. All rights reserved. The code is public to view and to run the hosted app, but it is not open source: copying, reselling, or publishing it (including on an app store) is not allowed without written permission. See [LICENSE](LICENSE). The bundled libraries in `vendor/` keep their own open-source licenses.
