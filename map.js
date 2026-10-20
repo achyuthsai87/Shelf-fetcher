@@ -322,6 +322,24 @@
     im.src = map.img;
   }
 
+  /* A PDF plan is drawn to a picture on this phone (first page) with pdf.js, then handled like a photo. */
+  function pdfToBlob(file) {
+    toast('Reading the PDF...');
+    return import('./vendor/pdfjs/pdf.min.mjs').then(function (lib) {
+      lib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', document.baseURI).href;
+      return file.arrayBuffer().then(function (buf) { return lib.getDocument({ data: buf }).promise; }).then(function (doc) {
+        return doc.getPage(1).then(function (page) {
+          var v1 = page.getViewport({ scale: 1 }), sc = Math.min(4, 1800 / Math.max(v1.width, v1.height)), vp = page.getViewport({ scale: sc });
+          var c = document.createElement('canvas'), ctx = c.getContext('2d');
+          c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
+            return new Promise(function (res, rej) { c.toBlob(function (b) { c.width = 0; c.height = 0; b ? res(b) : rej(new Error('blob')); }, 'image/jpeg', 0.9); });
+          }).then(function (blob) { var pages = doc.numPages; doc.destroy(); return { blob: blob, pages: pages }; });
+        });
+      });
+    });
+  }
   function setMapFromBlob(blob) {
     if (window.ShelfBackup) window.ShelfBackup.snapshot('Before replacing the map photo');
     var finish = function (src, w, h) {
@@ -683,8 +701,11 @@
     $('#mapReplaceBtn').addEventListener('click', function () { $('#mapFile').click(); });
     $('#mapFile').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
-      if (f) setMapFromBlob(f);
       e.target.value = '';
+      if (!f) return;
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')) {
+        pdfToBlob(f).then(function (r) { setMapFromBlob(r.blob); if (r.pages > 1) setTimeout(function () { toast('Used page 1 of ' + r.pages + ' from the PDF.'); }, 1800); }, function () { toast('Could not read that PDF. Try a screenshot of it instead.'); });
+      } else setMapFromBlob(f);
     });
     $('#mapEditBtn').addEventListener('click', function () {
       edit = !edit;
