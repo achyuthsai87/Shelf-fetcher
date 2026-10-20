@@ -843,7 +843,7 @@
     });
     $('#mapTabs').addEventListener('click', function (e) {
       var t = e.target.closest('[data-mtab]'), n = e.target.closest('[data-mnew]');
-      if (t) { $('#mapNewForm').hidden = true; switchTo(t.getAttribute('data-mtab')); return; }
+      if (t) { $('#mapNewForm').hidden = true; var keep = sel && sel.item; switchTo(t.getAttribute('data-mtab'), keep ? function () { if (map && imgEl) selectItem(keep); } : null); return; }
       if (n) { var f = $('#mapNewForm'); f.hidden = !f.hidden; if (!f.hidden) setTimeout(function () { $('#mapNewName').focus(); }, 30); }
     });
     $('#mapNewForm').addEventListener('submit', function (e) {
