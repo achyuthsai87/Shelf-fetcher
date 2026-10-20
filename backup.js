@@ -108,7 +108,14 @@
       if (!window.confirm('Go back to ' + when(s.t) + ' (' + s.n + ' bottles, ' + s.z + ' sections)? What is on the phone now is saved to the automatic backups first.')) return;
       apply(s.b, s.m, null);
     });
-    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    var standalone = !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+    function note(p) {
+      var el = $('#persistNote'); if (!el) return;
+      var t = standalone ? 'Running as an installed app, which keeps its data separate from your browser history.' : 'Tip: open this page in Safari, tap Share, then Add to Home Screen, and use that icon. An installed app keeps its data even when you clear browser history.';
+      el.textContent = (p ? 'This phone has agreed to keep your data safe from low-space cleanups. ' : '') + t + ' Clearing website data on purpose can still erase it, so keep a Drive backup.';
+    }
+    note(false);
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(note, function () {}); } catch (e) {}
     var l = list();
     if (!l.length || Date.now() - l[0].t > 6 * 3600 * 1000) snapshot('Automatic');
     render();
