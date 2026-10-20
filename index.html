@@ -43,6 +43,45 @@
     <div id="browseHost"></div>
   </section>
 
+  <section class="tabpane" id="tab-map">
+    <h1>Store map</h1>
+    <div class="glass card" id="mapEmpty">
+      <h2>Add your store plan</h2>
+      <p>Take a photo of your drawing or printout, even a rough one. It becomes a guide you trace over. The app then draws a clean 3D version of your store and makes the bottle glow where it sits.</p>
+      <button class="btn block" id="mapPickBtn" type="button">Choose or take a photo</button>
+    </div>
+    <div id="mapMain" hidden>
+      <div class="mapsearch">
+        <input class="search" id="mapSearch" type="search" placeholder="Find a bottle on the map" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Find a bottle on the map">
+        <div class="suggest" id="mapSuggest"></div>
+      </div>
+      <div class="glass mapwrap" id="mapWrap">
+        <div class="mapcv" id="mapCv"><canvas id="mapCanvas"></canvas></div>
+        <div class="mapdotwrap" id="mapDotWrap" hidden><span class="mapdot"></span><span class="maptag" id="mapTag"></span></div>
+      </div>
+      <div class="glass card mapcaption" id="mapCaption" hidden></div>
+      <div class="maptools">
+        <button class="btn ghost" id="mapEditBtn" type="button">Edit sections</button>
+        <button class="btn ghost" id="mapResetBtn" type="button">Reset view</button>
+      </div>
+      <label class="tiltrow" for="mapTilt"><span>Tilt</span><input id="mapTilt" type="range" min="25" max="90" value="54"></label>
+      <div class="glass card" id="mapEditHelp" hidden>
+        <h2>Trace your sections</h2>
+        <p>Drag on the photo to draw a box over each aisle or section. Tap a box to rename it, drag it to move it, and drag its corner square to resize it. Tidy up then straightens everything into a neat layout.</p>
+        <p id="mapUnplaced"></p>
+        <button class="btn block" id="mapTidyBtn" type="button">Tidy up</button>
+      </div>
+      <div class="glass card">
+        <h2>Map settings</h2>
+        <div class="setrow"><span>Look</span><div class="seg"><button id="segClean" type="button" aria-pressed="true">Clean</button><button id="segPhoto" type="button" aria-pressed="false">My drawing</button></div></div>
+        <div class="setrow"><span>Shelf 1 is the</span><div class="seg"><button id="segTop" type="button" aria-pressed="true">Top</button><button id="segBottom" type="button" aria-pressed="false">Bottom</button></div></div>
+        <div class="sheet-actions"><button class="btn ghost grow" id="mapReplaceBtn" type="button">Replace photo</button><button class="btn ghost grow" id="mapRemoveBtn" type="button">Remove map</button></div>
+        <p class="hint">The plan photo and your sections are saved on this phone only. Remove map deletes them.</p>
+      </div>
+    </div>
+    <input id="mapFile" type="file" accept="image/*" hidden>
+  </section>
+
   <section class="tabpane" id="tab-more">
     <h1>More</h1>
     <div class="glass card">
@@ -67,6 +106,7 @@
   <button type="button" data-tab="find" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span>Find</span></button>
   <button type="button" data-tab="browse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/></svg><span>Browse</span></button>
   <button type="button" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Add</span></button>
+  <button type="button" data-tab="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg><span>Map</span></button>
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>More</span></button>
 </nav>
 
@@ -108,6 +148,22 @@
   </form>
 </div>
 
+<div class="scrim" id="zoneScrim" hidden>
+  <form class="sheet" id="zoneForm" autocomplete="off">
+    <h2 id="zoneTitle">Name this section</h2>
+    <div class="field full"><label for="zName">Aisle or section name</label><input id="zName" list="dl-zone" placeholder="Aisle 3"></div>
+    <div class="field full"><label>Type</label><div class="seg" id="zKind"><button type="button" data-kind="tall" aria-pressed="true">Shelves</button><button type="button" data-kind="low" aria-pressed="false">Counter</button><button type="button" data-kind="flat" aria-pressed="false">Floor marker</button></div></div>
+    <div class="field full" id="zShelvesField"><label for="zShelves">Number of shelves</label><input id="zShelves" type="number" min="1" max="12" inputmode="numeric" value="5"></div>
+    <p class="err" id="zoneErr" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn grow" type="submit">Save</button>
+      <button class="btn ghost" id="zDelete" type="button" hidden>Delete</button>
+      <button class="btn ghost" id="zCancel" type="button">Cancel</button>
+    </div>
+    <datalist id="dl-zone"></datalist>
+  </form>
+</div>
+
 <div class="scrim" id="photoScrim" hidden>
   <div class="sheet" role="dialog" aria-label="Find by photo">
     <h2>Find by photo</h2>
@@ -136,5 +192,6 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="app.js"></script>
 <script src="photo.js"></script>
+<script src="map.js"></script>
 </body>
 </html>

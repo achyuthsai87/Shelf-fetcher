@@ -165,7 +165,7 @@
         (meta ? '<p class="meta">' + hl(meta) + '</p>' : '') +
         (it.notes ? '<p class="notes">' + hl(it.notes) + '</p>' : '') +
         '</div>' + loc + '</div>' +
-        '<div class="actions"><button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
+        '<div class="actions">' + (window.ShelfMap && window.ShelfMap.has() ? '<button class="link" type="button" data-act="map">Show on map</button>' : '') + '<button class="link" type="button" data-act="edit">Edit</button><button class="link danger" type="button" data-act="del">Delete</button></div>' +
         '</li>';
     }).join('');
     if (res.length > shown.length) {
@@ -211,9 +211,10 @@
 
   function showTab(name) {
     tab = name;
-    ['find', 'browse', 'more'].forEach(function (t) { $('#tab-' + t).classList.toggle('on', t === name); });
+    ['find', 'browse', 'map', 'more'].forEach(function (t) { $('#tab-' + t).classList.toggle('on', t === name); });
     document.querySelectorAll('.tabbar [data-tab]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === name); });
     if (name === 'browse') renderBrowse();
+    if (name === 'map' && window.ShelfMap) window.ShelfMap.onShow();
     window.scrollTo(0, 0);
   }
 
@@ -364,6 +365,7 @@
     var it = items.find(function (x) { return x.id === id; });
     if (!it) return;
     if (b.getAttribute('data-act') === 'edit') { openSheet(it); return; }
+    if (b.getAttribute('data-act') === 'map') { window.ShelfMap.show(it); return; }
     if (b.getAttribute('data-armed') !== '1') {
       b.setAttribute('data-armed', '1');
       b.textContent = 'Tap again to delete';
@@ -394,6 +396,8 @@
 
   window.ShelfApp = {
     items: function () { return items; },
+    showTab: showTab,
+    refresh: function () { renderAll(); },
     openAdd: function (pre) { openSheet(null, Object.assign({}, carry, pre || {})); }
   };
 

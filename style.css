@@ -357,3 +357,59 @@ h1 { margin: 18px 0 12px; font-size: 30px; font-weight: 800; letter-spacing: -0.
 }
 .pastebox:focus { border-color: var(--accent); outline: none; color: var(--ink); }
 .match-label { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+
+/* Store map */
+:root { --green: #15915f; }
+@media (prefers-color-scheme: dark) { :root { --green: #34d399; } }
+.mapsearch { display: grid; gap: 8px; margin-bottom: 10px; }
+.suggest { display: flex; gap: 8px; flex-wrap: wrap; }
+.suggest .chip { flex: none; max-width: 100%; }
+.mapwrap { position: relative; overflow: hidden; margin-bottom: 10px; }
+.mapcv { touch-action: pan-y; }
+.mapcv canvas { display: block; width: 100%; }
+.mapdotwrap { position: absolute; width: 0; height: 0; z-index: 2; pointer-events: none; }
+.mapdot {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--green);
+  border: 2.5px solid #fff;
+  animation: mapPulse 1.7s ease-out infinite;
+}
+.maptag {
+  position: absolute;
+  left: 0;
+  bottom: 16px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+@keyframes mapPulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 70%, transparent), 0 0 12px 3px color-mix(in srgb, var(--green) 60%, transparent); }
+  70% { box-shadow: 0 0 0 26px color-mix(in srgb, var(--green) 0%, transparent), 0 0 20px 7px color-mix(in srgb, var(--green) 55%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 0%, transparent), 0 0 12px 3px color-mix(in srgb, var(--green) 60%, transparent); }
+}
+.mapcaption { display: grid; gap: 2px; padding: 12px 16px; }
+.mapcaption span { color: var(--muted); font-size: 14px; }
+.mapcaption em { font-style: normal; font-size: 14px; color: var(--danger); margin-top: 4px; }
+.maptools { display: flex; gap: 8px; margin-bottom: 8px; }
+.maptools .btn { flex: 1; }
+.tiltrow { display: flex; align-items: center; gap: 12px; margin: 4px 4px 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.tiltrow input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-weight: 600; font-size: 15px; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 12px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; min-height: 36px; }
+.seg button[aria-pressed="true"] { background: var(--glass-strong); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); }
+#zKind { display: flex; }
+#zKind button { flex: 1; }
+#mapUnplaced:empty { display: none; }
+#mapUnplaced .chip { margin: 2px 2px 2px 0; }
