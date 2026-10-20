@@ -207,6 +207,7 @@
           return f;
         }).sort(function (p, q) { return p.t - q.t; });
 
+        var bandBest = null;
         faces.forEach(function (f) {
           var FA = f.c[0], FB = f.c[1];
           /* Only faces that look toward the camera are drawn, so from one side you never see the shelves of the other side. */
@@ -245,9 +246,14 @@
                 var za = st.topFirst ? Z * (1 - lv / n) : Z * (lv - 1) / n, zb = st.topFirst ? Z * (1 - (lv - 1) / n) : Z * lv / n;
                 ctx.fillStyle = pal.hi;
                 ctx.globalAlpha = 0.85;
-                poly(ctx, [P(A[0], A[1], za), P(B[0], B[1], za), P(B[0], B[1], zb), P(A[0], A[1], zb)]);
+                var bq = [P(A[0], A[1], za), P(B[0], B[1], za), P(B[0], B[1], zb), P(A[0], A[1], zb)];
+                poly(ctx, bq);
                 ctx.fill();
                 ctx.globalAlpha = 1;
+                var bA = 0, bi;
+                for (bi = 0; bi < 4; bi++) { var b1 = bq[bi], b2 = bq[(bi + 1) % 4]; bA += b1.X * b2.Y - b2.X * b1.Y; }
+                bA = Math.abs(bA) / 2;
+                if (!bandBest || bA > bandBest.a) bandBest = { a: bA, X: (bq[0].X + bq[1].X + bq[2].X + bq[3].X) / 4, Y: (bq[0].Y + bq[1].Y + bq[2].Y + bq[3].Y) / 4 };
               }
             }
             ctx.strokeStyle = pal.line;
@@ -275,7 +281,7 @@
         if (sel) {
           var lz = levelZ(z, st.selLevel || 0, st.topFirst);
           var dp = P((x0 + x1) / 2, (y0 + y1) / 2, lz);
-          result.dot = { X: dp.X, Y: dp.Y };
+          result.dot = bandBest ? { X: bandBest.X, Y: bandBest.Y } : { X: tc.X, Y: tc.Y };
         }
       });
     }
