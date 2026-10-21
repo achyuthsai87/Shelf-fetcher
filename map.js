@@ -646,6 +646,8 @@
     zoneCells = z && z.cells ? cellsOf(z).slice() : [];
     setKind(z && z.kind ? z.kind : 'tall');
     $('#zDelete').hidden = !z; $('#zAddNext').hidden = !z;
+    var rn = z && /^[A-Za-z]+\d*[a-z]*$/.test(String(z.name || '').trim()) ? /^[A-Za-z]+/.exec(String(z.name).trim())[0].toUpperCase() : '';
+    $('#zRenumber').hidden = !rn; $('#zRenumber').textContent = rn ? 'Renumber all ' + rn + ' boxes in order' : 'Renumber in order';
     setHs(z && z.hs ? z.hs : 1);
     $('#zSplitBox').hidden = !z;
     $('#zoneErr').hidden = true;
@@ -728,6 +730,22 @@
     if (!persist()) toast('This phone has no room left to keep the map.');
     closeZone(); notify(); refresh();
     toast(nz.name + ' added next to ' + z.name + '. Press and hold it to move or resize.');
+  }
+  /* Number the boxes that share a letter (A1, A1a, A1b, A2...) in map order: A1, A2, A3... down a column or along a row. */
+  function renumberFrom(z) {
+    var m = z && /^([A-Za-z]+)\d*[a-z]*$/.exec(String(z.name || '').trim());
+    if (!m) return;
+    var pre = m[1], re = new RegExp('^' + pre + '\\d+[a-z]*$', 'i');
+    var grp = map.zones.filter(function (q) { return re.test(String(q.name || '').trim()); });
+    if (grp.length < 2) { $('#zoneErr').textContent = 'Only one ' + pre + ' box. Nothing to renumber.'; $('#zoneErr').hidden = false; return; }
+    var xs = grp.map(function (q) { return q.x + q.w / 2; }), ys = grp.map(function (q) { return q.y + q.h / 2; });
+    var vert = (Math.max.apply(null, ys) - Math.min.apply(null, ys)) >= (Math.max.apply(null, xs) - Math.min.apply(null, xs));
+    grp.sort(function (a, b) { var ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2; return vert ? (ay - by) || (ax - bx) : (ax - bx) || (ay - by); });
+    if (window.ShelfBackup) window.ShelfBackup.snapshot('Before renumbering boxes');
+    grp.forEach(function (q, i) { q.name = pre + (i + 1); });
+    if (!persist()) toast('This phone has no room left to keep the map.');
+    closeZone(); notify(); refresh();
+    toast(grp.length + ' ' + pre + ' boxes numbered ' + pre + '1 to ' + pre + grp.length + (vert ? ' from the top' : ' from the left') + '. Bottles keep their old names, so check those.');
   }
   function setKind(k) {
     zoneKind = k;
@@ -1053,6 +1071,7 @@
     $('#zoneForm').addEventListener('submit', function (e) { e.preventDefault(); saveZone(); });
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
+    $('#zRenumber').addEventListener('click', function () { var z = zoneEditing && map.zones.filter(function (q) { return q.id === zoneEditing; })[0]; renumberFrom(z); });
     $('#zAddNext').addEventListener('click', function () { var z = zoneEditing && map.zones.filter(function (q) { return q.id === zoneEditing; })[0]; addNextTo(z); });
     $('#mapAddBox').addEventListener('click', function () {
       if (!map) return;
