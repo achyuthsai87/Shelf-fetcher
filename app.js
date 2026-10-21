@@ -683,7 +683,22 @@
     var ov = document.createElement('div'); ov.className = 'popov';
     ov.innerHTML = '<div class="popcard" role="dialog" aria-modal="true">' + html + '</div>';
     document.body.appendChild(ov);
-    wire(ov, function () { ov.remove(); });
+    var card = ov.firstChild, vv = window.visualViewport, scanEl = document.getElementById('scanOv');
+    /* Keep the pop-up inside the part of the screen the keyboard leaves free, with the typing box at the top. */
+    function fit() { if (!vv) return; ov.style.top = vv.offsetTop + 'px'; ov.style.height = vv.height + 'px'; ov.style.bottom = 'auto'; }
+    function mode() { ov.classList.toggle('top', !!card.querySelector('input:not([type=checkbox])')); }
+    if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit(); }
+    var mo = window.MutationObserver ? new MutationObserver(mode) : null; if (mo) mo.observe(card, { childList: true, subtree: true });
+    mode();
+    /* The camera screen behind stops reacting while the pop-up is open. */
+    if (scanEl) scanEl.setAttribute('inert', '');
+    wire(ov, function () {
+      if (vv) { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); }
+      if (mo) mo.disconnect();
+      ov.remove();
+      var s = document.getElementById('scanOv');
+      if (s && !document.querySelector('.popov')) { s.removeAttribute('inert'); var ti = document.getElementById('scanType'); if (ti) try { ti.focus({ preventScroll: true }); } catch (e) {} }
+    });
   }
   /* Spots a bottle has: its own Aisle and Shelf on the main map, plus every extra place. */
   function sameSpot(sec1, sh1, sec2, sh2) { return String(sec1 || '').trim().toLowerCase() === String(sec2 || '').trim().toLowerCase() && String(sh1 || '').trim() === String(sh2 || '').trim(); }
@@ -1138,7 +1153,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v67';
+  var APP_VERSION = 'v68';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
