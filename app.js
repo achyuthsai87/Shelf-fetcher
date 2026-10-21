@@ -478,13 +478,17 @@
     box.innerHTML = '<p class="hint">Say which column is which. A bottle is matched when this column equals its item code, brand or name.</p>' + sel('rmMatch', 'Match bottles by', gm, false) + sel('rmPrice', 'Price column', gp, true) + sel('rmQty', 'Quantity column', gq, true);
   }
   function normKey(v) { return String(v == null ? '' : v).trim().toLowerCase().replace(/^0+(?=\d)/, ''); }
+  /* A bottle can carry several barcodes in its code field, separated by commas. Adding one never removes the others. */
+  function codeList(v) { return String(v == null ? '' : v).split(/[\s,;|]+/).filter(function (x) { return x; }); }
+  function hasCode(it, k) { return codeList(it && it.code).some(function (c) { return normKey(c) === k; }); }
+  function addCode(old, c) { c = String(c || '').trim(); if (!c) return String(old || ''); var k = normKey(c); if (codeList(old).some(function (x) { return normKey(x) === k; })) return String(old || ''); return codeList(old).concat([c]).join(', '); }
   function runRefresh() {
     var msg = $('#importMsg'), rows = importRows();
     if (!rows.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
     var mi = parseInt($('#rmMatch').value, 10), pi = parseInt($('#rmPrice').value, 10), qi = parseInt($('#rmQty').value, 10);
     if (pi < 0 && qi < 0) { msg.textContent = 'Pick a price column, a quantity column, or both.'; msg.hidden = false; return; }
     var idx = {};
-    items.forEach(function (it) { [it.code, it.brand, it.flavor].forEach(function (v) { var k = normKey(v); if (!k) return; (idx[k] = idx[k] || []); if (idx[k].indexOf(it) < 0) idx[k].push(it); }); });
+    items.forEach(function (it) { codeList(it.code).concat([it.brand, it.flavor]).forEach(function (v) { var k = normKey(v); if (!k) return; (idx[k] = idx[k] || []); if (idx[k].indexOf(it) < 0) idx[k].push(it); }); });
     if (window.ShelfBackup) window.ShelfBackup.snapshot('Before refreshing prices and quantities');
     var prev = items.map(function (i) { return rawOf(i); }), upd = 0, same = 0, miss = 0, start = refreshHeader ? 1 : 0;
     for (var r = start; r < rows.length; r++) {
@@ -525,7 +529,7 @@
       hit.forEach(function (it) {
         if (upc.length >= 8) {
           if (/^Found - CONFLICT/i.test(st)) n.conflict++;
-          else if (/^Found/i.test(st)) { if (!it.code) { it.code = upc; n.code++; if (/not confirmed/i.test(st)) n.unsure++; } else if (normKey(it.code) !== normKey(upc)) n.other++; }
+          else if (/^Found/i.test(st)) { if (!hasCode(it, normKey(upc))) { var had = !!it.code; it.code = addCode(it.code, upc); n.code++; if (had) n.other++; if (/not confirmed/i.test(st)) n.unsure++; } }
         }
         if (ty && !/^unknown$/i.test(ty) && !it.type) { it.type = ty; n.type++; }
         if (sz && !it.size) { it.size = sz; n.size++; }
@@ -534,7 +538,7 @@
     if ((n.code || n.type || n.size) && !saveLocal()) { items = prev.map(mk); msg.textContent = 'This phone has no room left to save the list.'; msg.hidden = false; return; }
     renderAll();
     msg.textContent = 'Matched ' + n.rows + ' bottles by item number' + (n.miss ? ' (' + n.miss + ' rows are not in your list)' : '') + '. Added ' + n.code + ' barcodes' + (n.unsure ? ' (' + n.unsure + ' of them are name matches with the size not confirmed)' : '') + ', ' + n.type + ' types and ' + n.size + ' sizes.' +
-      (n.conflict ? ' Skipped ' + n.conflict + ' barcodes marked as conflicts, so scan those yourself.' : '') + (n.other ? ' Kept ' + n.other + ' barcodes you already had.' : '');
+      (n.conflict ? ' Skipped ' + n.conflict + ' barcodes marked as conflicts, so scan those yourself.' : '') + (n.other ? ' ' + n.other + ' of those bottles already had a barcode, so it was added as an extra one and the old one was kept.' : '');
     msg.hidden = false;
   }
   function runImport() {
@@ -562,7 +566,7 @@
       var k = dupKey(it), old = byKey[k];
       if (old) {
         var ch = false;
-        ['type', 'price', 'qty', 'code', 'section', 'shelf', 'notes'].forEach(function (f) { if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
+        ['type', 'price', 'qty', 'code', 'section', 'shelf', 'notes'].forEach(function (f) { if (f === 'code') { var nc = it.code; codeList(nc).forEach(function (c1) { var m1 = addCode(old.code, c1); if (m1 !== old.code) { old.code = m1; ch = true; } }); return; } if (it[f] && it[f] !== old[f]) { old[f] = it[f]; ch = true; } });
         if (ch) { old.updatedAt = Date.now(); updated++; } else same++;
         return;
       }
@@ -719,7 +723,7 @@
   function afterScan(code) {
     var lab = parseLabel(code);
     if (lab) { labelPopup(lab); return; }
-    var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
+    var k = normKey(code), hit = items.filter(function (i) { return hasCode(i, k) || normKey(i.brand) === k; });
     if (hit.length) { setSearch(code); toast(hit.length === 1 ? 'Found ' + hit[0].brand + (hit[0].flavor ? ' ' + hit[0].flavor : '') : hit.length + ' bottles with that code'); return; }
     scanCode = code;
     $('#linkMsg').textContent = 'The barcode ' + code + ' is not linked to a bottle yet. Search for the bottle once and tap it, and from then on scanning finds it.';
@@ -732,18 +736,18 @@
     if (!window.ShelfSearch.tokens(qv).length) { host.innerHTML = ''; return; }
     var res = window.ShelfSearch.run(items, qv).slice(0, 8).map(function (r) { return r.it; });
     host.innerHTML = res.length ? res.map(function (it) {
-      return '<button class="linkrow" type="button" data-link="' + esc(it.id) + '"><b>' + esc(it.brand) + '</b>' + (it.flavor ? ' ' + esc(it.flavor) : '') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + (it.code ? ' <small>(has code ' + esc(it.code) + ')</small>' : '') + '</button>';
+      return '<button class="linkrow" type="button" data-link="' + esc(it.id) + '"><b>' + esc(it.brand) + '</b>' + (it.flavor ? ' ' + esc(it.flavor) : '') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + (it.code ? ' <small>(has ' + (codeList(it.code).length > 1 ? 'codes ' : 'code ') + esc(it.code) + ')</small>' : '') + '</button>';
     }).join('') : '<p class="hint">Nothing matches. Try fewer words, or add it as a new bottle.</p>';
   }
   $('#scanBtn').addEventListener('click', function () { if (window.ShelfScan) window.ShelfScan.open(afterScan); });
-  $('#scanFormBtn').addEventListener('click', function () { if (window.ShelfScan) window.ShelfScan.open(function (c) { F.code.value = c; }); });
+  $('#scanFormBtn').addEventListener('click', function () { if (window.ShelfScan) window.ShelfScan.open(function (c) { F.code.value = addCode(F.code.value, c); }); });
   $('#linkSearch').addEventListener('input', renderLink);
   $('#linkClose').addEventListener('click', function () { $('#linkScrim').hidden = true; });
   $('#linkAdd').addEventListener('click', function () { $('#linkScrim').hidden = true; openSheet(null, Object.assign({}, carry, { code: scanCode })); });
   $('#linkList').addEventListener('click', function (e) {
     var b = e.target.closest('[data-link]'); if (!b) return;
     var it = items.filter(function (x) { return x.id === b.getAttribute('data-link'); })[0]; if (!it) return;
-    var raw = rawOf(it); raw.code = scanCode; var upd = mk(raw);
+    var raw = rawOf(it); raw.code = addCode(raw.code, scanCode); var upd = mk(raw);
     try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
     $('#linkScrim').hidden = true;
     setSearch(scanCode);
@@ -1146,7 +1150,7 @@
           res.addEventListener('click', function (e) {
             var b = e.target.closest('[data-pick]'); if (!b) return;
             var it = items.filter(function (x) { return x.id === b.getAttribute('data-pick'); })[0]; if (!it) return;
-            var snap = copyRaw(it), raw = copyRaw(it); raw.code = code;
+            var snap = copyRaw(it), raw = copyRaw(it); raw.code = addCode(raw.code, code);
             var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c); upd = typeOnto(upd, c);
             try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
             placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
@@ -1166,7 +1170,7 @@
         window.ShelfScan.setHead(headHtml());
         return { text: 'Now on ' + stockSpotLabel(c) };
       }
-      var k = normKey(code), hit = items.filter(function (i) { return normKey(i.code) === k || normKey(i.brand) === k; });
+      var k = normKey(code), hit = items.filter(function (i) { return hasCode(i, k) || normKey(i.brand) === k; });
       if (!hit.length) {
         if (skipped[k]) return null;
         if (check) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad' }; }
@@ -1306,7 +1310,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v81';
+  var APP_VERSION = 'v82';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
