@@ -773,6 +773,57 @@
     setTimeout(function () { $('#stSection').focus(); }, 40);
   }
   function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + shelfLab(c.shelf) : ''); }
+  /* Set the type (Whiskey, Vodka...) of every bottle that sits in the named boxes, so the type filter works. */
+  function parseBoxNames(raw) {
+    var names = [];
+    String(raw || '').split(/[,;\n&+]+|\s+and\s+/i).forEach(function (t) {
+      t = t.trim(); if (!t) return;
+      var m = /^([A-Za-z]*)\s*(\d+)\s*[-–]\s*(?:[A-Za-z]*)\s*(\d+)$/.exec(t), a, b, n;
+      if (m) { a = parseInt(m[2], 10); b = parseInt(m[3], 10); }
+      if (m && b >= a && b - a < 200) { for (n = a; n <= b; n++) names.push((m[1] + n).toLowerCase()); }
+      else names.push(t.toLowerCase());
+    });
+    return names;
+  }
+  function openTypeByAisle() {
+    var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
+    var known = {}; items.forEach(function (i) { if (i.type) known[i.type.toLowerCase()] = i.type; });
+    var opts = Object.keys(known).sort().map(function (k) { return '<option value="' + esc(known[k]) + '"></option>'; }).join('');
+    popup('<h3>Set bottle type by aisle</h3><p>Every bottle listed in these boxes gets the type you choose. Example: A1, A2, A3 or 1-9.</p>' +
+      (ms.length > 1 ? '<label class="hint" for="tbMap">Map</label><select id="tbMap">' + ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('') + '</select>' : '') +
+      '<input id="tbNames" placeholder="Boxes: A1, A2, A3" autocomplete="off" autocapitalize="characters">' +
+      '<input id="tbType" list="tbTypes" placeholder="Type: Whiskey" autocomplete="off"><datalist id="tbTypes">' + opts + '</datalist>' +
+      '<label class="chk"><input type="checkbox" id="tbBlank" checked> Only bottles with no type yet</label>' +
+      '<p class="hint" id="tbInfo"></p>' +
+      '<div class="popbtns"><button class="btn grow" data-tbgo type="button">Set type</button><button class="btn ghost grow" data-tbclose type="button">Cancel</button></div>', function (ov, close) {
+      function pick() {
+        var names = parseBoxNames(ov.querySelector('#tbNames').value), map = ov.querySelector('#tbMap') ? ov.querySelector('#tbMap').value : 'main';
+        var only = ov.querySelector('#tbBlank').checked, set = {}; names.forEach(function (n) { set[n] = 1; });
+        var hit = names.length ? items.filter(function (it) {
+          if (only && it.type) return false;
+          return itemSpots(it).some(function (s) { return s.m === map && set[String(s.section || '').trim().toLowerCase()]; });
+        }) : [];
+        return hit;
+      }
+      function info() { var n = pick().length; ov.querySelector('#tbInfo').textContent = n + ' bottle' + (n === 1 ? '' : 's') + ' would change.'; }
+      ov.addEventListener('input', info); ov.addEventListener('change', info); info();
+      ov.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t) return;
+        if (t.hasAttribute('data-tbclose')) { close(); return; }
+        if (!t.hasAttribute('data-tbgo')) return;
+        var type = ov.querySelector('#tbType').value.trim(), hit = pick();
+        if (!type) { toast('Type the bottle type first, like Whiskey.'); return; }
+        if (!hit.length) { toast('No bottles found in those boxes.'); return; }
+        if (window.ShelfBackup && window.ShelfBackup.snapshot) window.ShelfBackup.snapshot('Before setting bottle types');
+        var prev = items.slice(), ids = {}; hit.forEach(function (it) { ids[it.id] = 1; });
+        var now = Date.now();
+        items = items.map(function (it) { if (!ids[it.id]) return it; var r = copyRaw(it); r.type = type; r.updatedAt = now; return mk(r); });
+        if (!saveLocal()) { items = prev; toast('This phone has no room left to save.'); return; }
+        close(); renderAll(); toast(hit.length + ' bottle' + (hit.length === 1 ? '' : 's') + ' set to ' + type + '.');
+      });
+    });
+  }
+  $('#typeBtn').addEventListener('click', openTypeByAisle);
   $('#stockBtn').addEventListener('click', function () { openStock('stock'); });
   $('#checkBtn').addEventListener('click', function () { openStock('check'); });
   $('#stockClose').addEventListener('click', function () { $('#stockScrim').hidden = true; });
