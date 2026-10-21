@@ -1257,11 +1257,21 @@
     li.value = lowAt();
     li.addEventListener('change', function () { var v = parseInt(li.value, 10); try { localStorage.setItem(LOWKEY, String(v >= 0 ? v : 2)); } catch (e) {} li.value = lowAt(); renderAll(); });
   })();
+  /* A file with SKU and UPC_Barcode columns is the enriched list: switch to fill-in mode so nothing gets added twice or renamed. */
+  function autoEnrich() {
+    var first = String($('#importText').value.split(/\r?\n/)[0] || '').toLowerCase().replace(/[^a-z,\t_]/g, '');
+    if (/(^|[,\t])sku([,\t]|$)/.test(first) && /upc_?barcode/.test(first)) {
+      $('#importEnrich').checked = true; $('#importUpdateOnly').checked = false;
+      var m = $('#importMsg'); m.textContent = 'This looks like the enriched list, so fill-in mode is on. It only adds missing barcodes, types and sizes. Names, aisles, shelves, prices and quantities stay as they are.'; m.hidden = false;
+    }
+  }
   $('#importFile').addEventListener('change', function (e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
     var r = new FileReader();
-    r.onload = function () { $('#importText').value = String(r.result || ''); fillMapper(); };
+    r.onload = function () {
+      $('#importText').value = String(r.result || ''); autoEnrich(); fillMapper();
+    };
     r.readAsText(f);
   });
   $('#importSheet').addEventListener('submit', function (e) { e.preventDefault(); runImport(); });
@@ -1310,7 +1320,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v82';
+  var APP_VERSION = 'v83';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
