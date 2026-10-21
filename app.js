@@ -448,14 +448,28 @@
     out.push(cur);
     return out.map(function (s) { return s.trim(); });
   }
+  /* Whole-file CSV reader: handles quoted cells that contain commas or line breaks, a byte-order mark, and comma, tab or semicolon files. */
+  function parseCsv(text) {
+    text = String(text || '').replace(/^\ufeff/, '');
+    var first = text.split(/\r?\n/)[0] || '', cnt = function (ch) { return first.split(ch).length - 1; };
+    var d = cnt('\t') > 0 ? '\t' : (cnt(';') > cnt(',') ? ';' : ','), rows = [], row = [], cur = '', inq = false, i, c;
+    function endRow() { row.push(cur); cur = ''; if (row.some(function (x) { return x.trim(); })) rows.push(row.map(function (x) { return x.trim(); })); row = []; }
+    for (i = 0; i < text.length; i++) {
+      c = text[i];
+      if (inq) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inq = false; } else cur += c; }
+      else if (c === '"' && cur === '') inq = true;
+      else if (c === d) { row.push(cur); cur = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; endRow(); }
+      else cur += c;
+    }
+    if (cur !== '' || row.length) endRow();
+    return rows;
+  }
   function dupKey(o) { return [o.brand, o.flavor, o.size].map(function (s) { return norm(s).toLowerCase(); }).join('|'); }
   /* Refresh mode: match a column to bottles already listed (by item code, brand or name) and update only price and quantity. */
   var refreshHeader = false;
   function importRows() {
-    var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
-    if (!lines.length) return [];
-    var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
-    return lines.map(function (l) { return parseLine(l, delim); });
+    return parseCsv($('#importText').value);
   }
   function fillMapper() {
     var box = $('#importMapBox'), on = $('#importUpdateOnly').checked;
@@ -505,7 +519,7 @@
       });
     }
     if (upd && !saveLocal()) { items = prev.map(mk); msg.textContent = 'This phone has no room left to save the list.'; msg.hidden = false; return; }
-    renderAll();
+    renderAll(); if (upd) offerUndo(prev);
     msg.textContent = 'Updated ' + upd + ' bottle' + (upd === 1 ? '' : 's') + (same ? ', ' + same + ' already up to date' : '') + (miss ? ', ' + miss + ' rows not found in your list' : '') + '.';
     msg.hidden = false;
   }
@@ -536,21 +550,25 @@
       });
     }
     if ((n.code || n.type || n.size) && !saveLocal()) { items = prev.map(mk); msg.textContent = 'This phone has no room left to save the list.'; msg.hidden = false; return; }
-    renderAll();
+    renderAll(); if (n.code || n.type || n.size) offerUndo(prev);
     msg.textContent = 'Matched ' + n.rows + ' bottles by item number' + (n.miss ? ' (' + n.miss + ' rows are not in your list)' : '') + '. Added ' + n.code + ' barcodes' + (n.unsure ? ' (' + n.unsure + ' of them are name matches with the size not confirmed)' : '') + ', ' + n.type + ' types and ' + n.size + ' sizes.' +
       (n.conflict ? ' Skipped ' + n.conflict + ' barcodes marked as conflicts, so scan those yourself.' : '') + (n.other ? ' ' + n.other + ' of those bottles already had a barcode, so it was added as an extra one and the old one was kept.' : '');
     msg.hidden = false;
   }
+  /* One tap to undo the import that just ran. (An automatic backup was also saved first.) */
+  var importUndoRaw = null;
+  function offerUndo(prevRaw) { importUndoRaw = prevRaw; $('#importUndo').hidden = !prevRaw; }
   function runImport() {
+    offerUndo(null);
     if ($('#importEnrich').checked) { runEnrich(); return; }
     if ($('#importUpdateOnly').checked) { runRefresh(); return; }
     var msg = $('#importMsg');
-    var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    var lines = parseCsv($('#importText').value);
     if (!lines.length) { msg.textContent = 'Choose a file or paste at least one line first.'; msg.hidden = false; return; }
-    var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    var prevRaw = items.map(function (i) { return rawOf(i); });
     var ALIASES = { brand: ['brand', 'name', 'item', 'item name', 'description', 'product', 'product name', 'title'], flavor: ['flavor', 'flavour', 'variant'], type: ['type', 'category', 'class', 'dept', 'department', 'kind'], size: ['size', 'volume', 'unit size', 'pack', 'pack size'], qty: ['qty', 'quantity', 'on hand', 'onhand', 'qoh', 'stock', 'in stock', 'count'], code: ['code', 'upc', 'barcode', 'sku', 'item code', 'item number', 'item no', 'plu', 'ean'], price: ['price', 'retail', 'retail price', 'unit price', 'sell price', 'selling price', 'srp', 'cost'], section: ['aisle', 'section', 'location', 'zone', 'area'], shelf: ['shelf', 'level', 'row', 'step'], notes: ['notes', 'note', 'keywords', 'tags', 'details'] };
     var cols = { brand: 0, flavor: 1, type: 2, size: 3, price: -1, qty: -1, code: -1, section: 4, shelf: 5, notes: -1 }, hasHeader = false;
-    var h0 = parseLine(lines[0], delim).map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
+    var h0 = lines[0].map(function (s) { return s.toLowerCase().replace(/[^a-z ]/g, '').trim(); });
     var map2 = {}, hits = 0;
     Object.keys(ALIASES).forEach(function (f) { var ix = -1; ALIASES[f].forEach(function (al) { if (ix < 0) ix = h0.indexOf(al); }); if (ix >= 0) { map2[f] = ix; hits++; } });
     if (hits >= 2 || (hits >= 1 && map2.brand !== undefined)) { hasHeader = true; cols = { brand: -1, flavor: -1, type: -1, size: -1, price: -1, qty: -1, code: -1, section: -1, shelf: -1, notes: -1 }; Object.keys(map2).forEach(function (f) { cols[f] = map2[f]; }); }
@@ -559,7 +577,7 @@
     var added = 0, updated = 0, same = 0, fresh = [];
     lines.forEach(function (l, idx) {
       if (idx === 0 && hasHeader) return;
-      var c = parseLine(l, delim);
+      var c = l;
       var g = function (f) { return cols[f] >= 0 && cols[f] < c.length ? c[cols[f]] : ''; };
       if (!g('brand')) return;
       var it = mk({ id: newId(), brand: g('brand'), flavor: g('flavor'), type: g('type'), size: g('size'), price: g('price'), qty: g('qty'), code: g('code'), section: g('section'), shelf: g('shelf'), notes: g('notes'), updatedAt: Date.now() });
@@ -584,7 +602,7 @@
       msg.hidden = false;
       return;
     }
-    renderAll();
+    renderAll(); if (added || updated) offerUndo(prevRaw);
     msg.textContent = 'Added ' + added + (updated ? ', updated location on ' + updated : '') + (skipped ? ', ' + skipped + ' already up to date' : '') + '.';
     msg.hidden = false;
     if (added || updated) { $('#importText').value = ''; $('#importFile').value = ''; }
@@ -610,6 +628,7 @@
 
   function openImport() {
     $('#importMsg').hidden = true;
+    $('#importUndo').hidden = true; importUndoRaw = null;
     $('#importScrim').hidden = false;
   }
 
@@ -1275,6 +1294,26 @@
     r.readAsText(f);
   });
   $('#importSheet').addEventListener('submit', function (e) { e.preventDefault(); runImport(); });
+  $('#importUndo').addEventListener('click', function () {
+    if (!importUndoRaw) return;
+    var cur = items;
+    items = importUndoRaw.map(mk);
+    if (!saveLocal()) { items = cur; toast('This phone has no room left to undo.'); return; }
+    importUndoRaw = null; this.hidden = true; renderAll();
+    var m = $('#importMsg'); m.textContent = 'Import undone. Your list is back the way it was.'; m.hidden = false;
+  });
+  $('#mergeBackupBtn').addEventListener('click', function () { $('#mergeFile').click(); });
+  $('#mergeFile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      var o; try { o = JSON.parse(String(r.result || '')); } catch (x) { o = null; }
+      if (!o || o.app !== 'shelf-finder' || !Array.isArray(o.bottles)) { toast('That is not a Shelf Finder backup file.'); return; }
+      var res = mergeBottles(o.bottles);
+      if (res) toast('Merged: ' + res.added + ' added, ' + res.updated + ' updated, ' + res.same + ' already the same.');
+    };
+    r.readAsText(f);
+  });
   $('#importCancel').addEventListener('click', function () { $('#importScrim').hidden = true; });
   $('#importScrim').addEventListener('mousedown', function (e) { if (e.target === this) this.hidden = true; });
   $('#exportBtn').addEventListener('click', exportCsv);
@@ -1282,7 +1321,32 @@
     if (e.key === 'Escape') { $('#sheetScrim').hidden = true; $('#importScrim').hidden = true; }
   });
 
+  /* Merge bottles from another phone's backup. Newest edit wins for each bottle; barcodes from both are kept; nothing is deleted. */
+  function mergeBottles(list) {
+    var byId = {}, byKey = {}, add = 0, upd = 0, same = 0, bad = 0;
+    items.forEach(function (i) { byId[i.id] = i; byKey[dupKey(i)] = i; });
+    var prevRaw = items.map(function (i) { return rawOf(i); }), fresh = [];
+    list.forEach(function (raw) {
+      if (!raw || !raw.brand) { bad++; return; }
+      var inc = mk(raw), loc = byId[inc.id] || byKey[dupKey(inc)];
+      if (!loc) { fresh.push(inc); byId[inc.id] = inc; byKey[dupKey(inc)] = inc; add++; return; }
+      var ch = false, newer = (inc.updatedAt || 0) > (loc.updatedAt || 0);
+      if (newer) {
+        ['flavor', 'type', 'size', 'price', 'qty', 'section', 'shelf', 'notes'].forEach(function (f) { if (inc[f] !== loc[f]) { loc[f] = inc[f]; ch = true; } });
+        if (JSON.stringify(inc.places || []) !== JSON.stringify(loc.places || [])) { loc.places = inc.places && inc.places.length ? inc.places : undefined; ch = true; }
+      } else ['type', 'size', 'notes'].forEach(function (f) { if (!loc[f] && inc[f]) { loc[f] = inc[f]; ch = true; } });
+      codeList(inc.code).forEach(function (c1) { var m1 = addCode(loc.code, c1); if (m1 !== loc.code) { loc.code = m1; ch = true; } });
+      if (ch) { if (newer) loc.updatedAt = inc.updatedAt; upd++; } else same++;
+    });
+    if (window.ShelfBackup && (add || upd)) window.ShelfBackup.snapshot('Before merging another phone');
+    var prev = items;
+    items = items.concat(fresh);
+    if ((add || upd) && !saveLocal()) { items = prev; prevRaw.forEach(function (r, k) { prev[k] = mk(r); }); toast('This phone has no room left to merge.'); return null; }
+    renderAll();
+    return { added: add, updated: upd, same: same, bad: bad };
+  }
   window.ShelfApp = {
+    mergeBottles: mergeBottles,
     items: function () { return items; },
     showTab: showTab,
     refresh: function () { renderAll(); },
@@ -1320,7 +1384,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v83';
+  var APP_VERSION = 'v84';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

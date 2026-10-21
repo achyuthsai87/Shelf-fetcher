@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=83">
+<link rel="stylesheet" href="style.css?v=84">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -136,6 +136,9 @@
       <p>Saves your bottles, the map and every section into one file. Tap Save backup, then choose Save to Files and pick your Google Drive folder. The phone remembers that folder, so next time it is the same two taps. To get everything back, tap Restore and pick the file.</p>
       <p id="backupStatus" class="hint"></p>
       <div class="mapactions"><button class="btn" id="saveBackupBtn" type="button">Save backup</button><button class="btn ghost" id="restoreBackupBtn" type="button">Restore</button></div>
+      <div class="mapactions"><button class="btn ghost" id="mergeBackupBtn" type="button">Merge another phone's backup</button></div>
+      <p class="hint">Merge adds bottles and newer edits from another phone's backup file. It deletes nothing and keeps this phone's map.</p>
+      <input id="mergeFile" type="file" accept=".json,application/json" hidden>
       <input id="restoreFile" type="file" accept=".json,application/json" hidden>
     </div>
     <div class="glass card">
@@ -208,6 +211,7 @@
     <label class="chk"><input type="checkbox" id="importEnrich"> <span>Fill barcodes, types and sizes from an enriched list. Matches by item number, adds only what is missing, and never changes aisle, shelf, price or quantity.</span></label>
     <div id="importMapBox" hidden></div>
     <p class="hint" id="importMsg" hidden></p>
+    <button class="btn ghost block" id="importUndo" type="button" hidden>Undo this import</button>
     <div class="sheet-actions">
       <button class="btn grow" id="importGo" type="submit">Import</button>
       <button class="btn ghost" id="importCancel" type="button">Close</button>
@@ -298,11 +302,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=83"></script>
-<script src="app.js?v=83"></script>
-<script src="photo.js?v=83"></script>
-<script src="scan.js?v=83"></script>
-<script src="map.js?v=83"></script>
-<script src="backup.js?v=83"></script>
+<script src="search.js?v=84"></script>
+<script src="app.js?v=84"></script>
+<script src="photo.js?v=84"></script>
+<script src="scan.js?v=84"></script>
+<script src="map.js?v=84"></script>
+<script src="backup.js?v=84"></script>
 </body>
 </html>
