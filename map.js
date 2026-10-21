@@ -715,16 +715,24 @@
   }
   /* A free spot of the same size right next to a box (right, below, left, above), or on top of it if the map is full there. */
   function roomNextTo(z) {
-    var g = 0.004, c = [{ x: z.x + z.w + g, y: z.y }, { x: z.x, y: z.y + z.h + g }, { x: z.x - z.w - g, y: z.y }, { x: z.x, y: z.y - z.h - g }], i;
+    var g = 0.004, below = { x: z.x, y: z.y + z.h + g }, above = { x: z.x, y: z.y - z.h - g }, right = { x: z.x + z.w + g, y: z.y }, left = { x: z.x - z.w - g, y: z.y }, i;
+    var nm = /^([A-Za-z]+)\d+[a-z]*$/.exec(String(z.name || '').trim()), sib = nm ? map.zones.filter(function (q) { return new RegExp('^' + nm[1] + '\\d+[a-z]*$', 'i').test(String(q.name || '').trim()); }) : [], c, strict = false;
+    if (sib.length >= 2) {
+      var xs = sib.map(function (q) { return q.x + q.w / 2; }), ys = sib.map(function (q) { return q.y + q.h / 2; });
+      var vert = (Math.max.apply(null, ys) - Math.min.apply(null, ys)) >= (Math.max.apply(null, xs) - Math.min.apply(null, xs));
+      c = vert ? [below, above] : [right, left]; strict = true;
+    } else c = [right, below, left, above];
     for (i = 0; i < c.length; i++) {
       var t = { x: c[i].x, y: c[i].y, w: z.w, h: z.h };
       if (t.x >= 0 && t.y >= 0 && t.x + t.w <= 1 && t.y + t.h <= 1 && !overlapsAny(t, map.zones)) return t;
     }
-    return { x: Math.min(Math.max(0, z.x + z.w * 0.3), 1 - z.w), y: Math.min(Math.max(0, z.y + z.h * 0.3), 1 - z.h), w: z.w, h: z.h };
+    return strict ? null : { x: Math.min(Math.max(0, z.x + z.w * 0.3), 1 - z.w), y: Math.min(Math.max(0, z.y + z.h * 0.3), 1 - z.h), w: z.w, h: z.h };
   }
   function addNextTo(z) {
     if (!z) return;
-    var r = roomNextTo(z), nz = { id: newId(), name: nextBoxName(z.name), x: r.x, y: r.y, w: r.w, h: r.h, shelves: z.shelves || 5, kind: z.kind || 'tall' };
+    var r = roomNextTo(z);
+    if (!r) { $('#zoneErr').textContent = 'No empty room next to ' + z.name + ' in line with the others. Split ' + z.name + ' into two instead, then use Renumber.'; $('#zoneErr').hidden = false; return; }
+    var nz = { id: newId(), name: nextBoxName(z.name), x: r.x, y: r.y, w: r.w, h: r.h, shelves: z.shelves || 5, kind: z.kind || 'tall' };
     if (z.hs) nz.hs = z.hs; if (z.cells) nz.cells = z.cells.slice();
     map.zones.push(nz);
     if (!persist()) toast('This phone has no room left to keep the map.');
@@ -1076,7 +1084,7 @@
     $('#mapAddBox').addEventListener('click', function () {
       if (!map) return;
       var ref = map.zones[map.zones.length - 1], rect, nm = '';
-      if (ref) { rect = roomNextTo(ref); nm = nextBoxName(ref.name); } else rect = { x: 0.45, y: 0.45, w: 0.1, h: 0.1 };
+      if (ref) { rect = roomNextTo(ref) || { x: 0.45, y: 0.45, w: ref.w, h: ref.h }; nm = nextBoxName(ref.name); } else rect = { x: 0.45, y: 0.45, w: 0.1, h: 0.1 };
       pendingName = nm; openZone(null, rect);
     });
     var bulkKind = 'cooler';
