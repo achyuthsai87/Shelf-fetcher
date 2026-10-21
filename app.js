@@ -505,7 +505,40 @@
     msg.textContent = 'Updated ' + upd + ' bottle' + (upd === 1 ? '' : 's') + (same ? ', ' + same + ' already up to date' : '') + (miss ? ', ' + miss + ' rows not found in your list' : '') + '.';
     msg.hidden = false;
   }
+  /* Enriched list: match each row to a bottle by item number and fill in what is missing (barcode, type, size). Locations, prices and quantities are never touched. */
+  function runEnrich() {
+    var msg = $('#importMsg'), rows = importRows();
+    if (rows.length < 2) { msg.textContent = 'Choose the enriched file first.'; msg.hidden = false; return; }
+    var low = rows[0].map(function (x) { return x.toLowerCase().replace(/[^a-z]/g, ''); });
+    function col(names) { for (var k = 0; k < names.length; k++) { var ix = low.indexOf(names[k]); if (ix >= 0) return ix; } return -1; }
+    var cSku = col(['sku', 'itemnumber', 'itemcode', 'item']), cUpc = col(['upcbarcode', 'upc', 'barcode']), cSt = col(['upcstatus']), cType = col(['type']), cSize = col(['sizename', 'size']);
+    if (cSku < 0 || (cUpc < 0 && cType < 0)) { msg.textContent = 'This file needs a SKU column plus UPC_Barcode and/or Type columns.'; msg.hidden = false; return; }
+    var idx = {};
+    items.forEach(function (it) { var k = normKey(it.brand); if (k) (idx[k] = idx[k] || []).push(it); });
+    if (window.ShelfBackup) window.ShelfBackup.snapshot('Before filling barcodes and types');
+    var prev = items.map(function (i) { return rawOf(i); }), n = { rows: 0, miss: 0, code: 0, type: 0, size: 0, conflict: 0, other: 0, unsure: 0 }, r;
+    for (r = 1; r < rows.length; r++) {
+      var row = rows[r], hit = idx[normKey(row[cSku])];
+      if (!hit) { if (normKey(row[cSku])) n.miss++; continue; }
+      n.rows++;
+      var upc = cUpc >= 0 ? String(row[cUpc] || '').replace(/\D/g, '') : '', st = cSt >= 0 ? String(row[cSt] || '') : '', ty = cType >= 0 ? norm(row[cType]) : '', sz = cSize >= 0 ? norm(row[cSize]) : '';
+      hit.forEach(function (it) {
+        if (upc.length >= 8) {
+          if (/^Found - CONFLICT/i.test(st)) n.conflict++;
+          else if (/^Found/i.test(st)) { if (!it.code) { it.code = upc; n.code++; if (/not confirmed/i.test(st)) n.unsure++; } else if (normKey(it.code) !== normKey(upc)) n.other++; }
+        }
+        if (ty && !/^unknown$/i.test(ty) && !it.type) { it.type = ty; n.type++; }
+        if (sz && !it.size) { it.size = sz; n.size++; }
+      });
+    }
+    if ((n.code || n.type || n.size) && !saveLocal()) { items = prev.map(mk); msg.textContent = 'This phone has no room left to save the list.'; msg.hidden = false; return; }
+    renderAll();
+    msg.textContent = 'Matched ' + n.rows + ' bottles by item number' + (n.miss ? ' (' + n.miss + ' rows are not in your list)' : '') + '. Added ' + n.code + ' barcodes' + (n.unsure ? ' (' + n.unsure + ' of them are name matches with the size not confirmed)' : '') + ', ' + n.type + ' types and ' + n.size + ' sizes.' +
+      (n.conflict ? ' Skipped ' + n.conflict + ' barcodes marked as conflicts, so scan those yourself.' : '') + (n.other ? ' Kept ' + n.other + ' barcodes you already had.' : '');
+    msg.hidden = false;
+  }
   function runImport() {
+    if ($('#importEnrich').checked) { runEnrich(); return; }
     if ($('#importUpdateOnly').checked) { runRefresh(); return; }
     var msg = $('#importMsg');
     var lines = $('#importText').value.split(/\r?\n/).filter(function (l) { return l.trim(); });
@@ -1211,7 +1244,8 @@
   }
   $('#labelsBtn').addEventListener('click', openLabels);
   $('#importBtn').addEventListener('click', openImport);
-  $('#importUpdateOnly').addEventListener('change', fillMapper);
+  $('#importUpdateOnly').addEventListener('change', function () { if (this.checked) $('#importEnrich').checked = false; fillMapper(); });
+  $('#importEnrich').addEventListener('change', function () { if (this.checked) { $('#importUpdateOnly').checked = false; fillMapper(); } });
   $('#importText').addEventListener('input', function () { if ($('#importUpdateOnly').checked) fillMapper(); });
   $('#trashList').addEventListener('click', function (e) { var b = e.target.closest('[data-untrash]'); if (b) untrash(parseInt(b.getAttribute('data-untrash'), 10)); });
   (function () {
@@ -1272,7 +1306,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v80';
+  var APP_VERSION = 'v81';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

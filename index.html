@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=80">
+<link rel="stylesheet" href="style.css?v=81">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -205,6 +205,7 @@
     <div class="field full"><label for="importFile">CSV or text file</label><input id="importFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain"></div>
     <div class="field full"><label for="importText">Or paste here</label><textarea id="importText" style="min-height:160px" placeholder="Tito's, , Vodka, 750ml, Aisle 3, 2&#10;Jack Daniel's, Tennessee Honey, Whiskey, 750ml, Aisle 5, 1"></textarea></div>
     <label class="chk"><input type="checkbox" id="importUpdateOnly"> <span>Only update price and quantity. Adds nothing new and keeps every location.</span></label>
+    <label class="chk"><input type="checkbox" id="importEnrich"> <span>Fill barcodes, types and sizes from an enriched list. Matches by item number, adds only what is missing, and never changes aisle, shelf, price or quantity.</span></label>
     <div id="importMapBox" hidden></div>
     <p class="hint" id="importMsg" hidden></p>
     <div class="sheet-actions">
@@ -297,11 +298,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=80"></script>
-<script src="app.js?v=80"></script>
-<script src="photo.js?v=80"></script>
-<script src="scan.js?v=80"></script>
-<script src="map.js?v=80"></script>
-<script src="backup.js?v=80"></script>
+<script src="search.js?v=81"></script>
+<script src="app.js?v=81"></script>
+<script src="photo.js?v=81"></script>
+<script src="scan.js?v=81"></script>
+<script src="map.js?v=81"></script>
+<script src="backup.js?v=81"></script>
 </body>
 </html>
