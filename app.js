@@ -68,6 +68,7 @@
     var prev = items.slice();
     if (i < 0) items.push(it); else items[i] = it;
     if (!saveLocal()) { items = prev; throw new Error('storage'); }
+    try { logRecent(i >= 0 ? prev[i] : null, it); } catch (e) {}
     renderAll();
   }
   function removeItem(id) {
@@ -302,8 +303,66 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, 7000);
   }
+  /* Recent activity: the last bottles added, placed on a shelf, given a barcode or edited, so you can see where you stopped. */
+  var RECENTKEY = 'shelf-finder-recent-v1';
+  function recentList() { try { var l = JSON.parse(localStorage.getItem(RECENTKEY) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  function logRecent(old, it) {
+    if (old && JSON.stringify(rawOf(Object.assign({}, old, { updatedAt: 0 }))) === JSON.stringify(rawOf(Object.assign({}, it, { updatedAt: 0 })))) return;
+    var spots = itemSpots(it), olds = old ? itemSpots(old) : [];
+    var fresh = spots.filter(function (s) { return !olds.some(function (o) { return o.m === s.m && sameSpot(o.section, o.shelf, s.section, s.shelf); }); });
+    var e = { id: it.id, t: Date.now(), added: !old, code: !!(it.code && (!old || it.code !== old.code)), at: fresh[0] ? { m: fresh[0].m, section: fresh[0].section, shelf: fresh[0].shelf } : null };
+    var list = recentList().filter(function (x) {
+      if (x.id !== it.id) return true;
+      e.added = e.added || x.added; e.code = e.code || x.code; if (!e.at && x.at) e.at = x.at; return false;
+    });
+    list.unshift(e);
+    try { localStorage.setItem(RECENTKEY, JSON.stringify(list.slice(0, 40))); } catch (x) {}
+  }
+  function agoText(t) {
+    var d = new Date(t), now = new Date(), mins = Math.round((now - d) / 60000), hm = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + ' min ago';
+    if (d.toDateString() === now.toDateString()) return hm;
+    var y = new Date(now.getTime() - 86400000);
+    if (d.toDateString() === y.toDateString()) return 'Yesterday ' + hm;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + hm;
+  }
+  function recentSpot(at) { return (at.m && at.m !== 'main' ? mapLabel(at.m) + ' · ' : '') + spotText(at); }
+  var recentMore = false;
+  function renderRecent() {
+    var host = $('#recentHost'); if (!host) return;
+    var list = recentList().map(function (e) { return { e: e, it: items.find(function (x) { return x.id === e.id; }) }; }).filter(function (r) { return r.it; });
+    if (!list.length) { host.innerHTML = ''; return; }
+    var lastPlaced = list.filter(function (r) { return r.e.at; })[0], today = new Date().toDateString();
+    var nToday = list.filter(function (r) { return r.e.at && new Date(r.e.t).toDateString() === today; }).length;
+    var shown = list.slice(0, recentMore ? 25 : 6);
+    host.innerHTML = '<div class="glass card recent"><h2>Where you left off</h2>' +
+      (lastPlaced ? '<p class="hint">Last shelf: <b>' + esc(recentSpot(lastPlaced.e.at)) + '</b> · ' + esc(agoText(lastPlaced.e.t)) + (nToday ? ' · ' + nToday + ' placed today' : '') + '</p><button class="btn block" type="button" data-resume="1">Continue at ' + esc(recentSpot(lastPlaced.e.at)) + '</button>' : '') +
+      '<ul class="recentlist">' + shown.map(function (r) {
+        var e = r.e, what = [];
+        if (e.added) what.push('Added'); if (e.code) what.push('Barcode saved'); if (e.at) what.push('Placed at ' + recentSpot(e.at)); if (!what.length) what.push('Edited');
+        return '<li data-rid="' + esc(r.it.id) + '"><b>' + esc(r.it.brand) + (r.it.flavor ? ' ' + esc(r.it.flavor) : '') + '</b>' + (r.it.size ? ' <small>' + esc(r.it.size) + '</small>' : '') + '<span class="rwhat">' + esc(what.join(' · ')) + '</span><em>' + esc(agoText(e.t)) + '</em></li>';
+      }).join('') + '</ul>' + (list.length > 6 ? '<button class="btn ghost block" type="button" data-rmore="1">' + (recentMore ? 'Show fewer' : 'Show more') + '</button>' : '') + '</div>';
+  }
+  document.addEventListener('click', function (e) {
+    var host = e.target.closest ? e.target.closest('#recentHost') : null; if (!host) return;
+    if (e.target.closest('[data-rmore]')) { recentMore = !recentMore; renderRecent(); return; }
+    if (e.target.closest('[data-resume]')) {
+      var lp = recentList().filter(function (x) { return x.at && items.some(function (i) { return i.id === x.id; }); })[0];
+      openStock('stock');
+      if (lp) {
+        if ($('#stMap').querySelector('[value="' + (lp.at.m || 'main') + '"]')) $('#stMap').value = lp.at.m || 'main';
+        $('#stSection').value = lp.at.section || ''; $('#stShelf').value = lp.at.shelf || ''; syncStockUI();
+      }
+      return;
+    }
+    var li = e.target.closest('li[data-rid]');
+    if (li) { var it = items.find(function (x) { return x.id === li.getAttribute('data-rid'); }); if (it) openSheet(it); }
+  });
+
   function renderAll() {
     renderTrash();
+    renderRecent();
     renderHero();
     renderChips();
     renderList();
@@ -1212,7 +1271,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v76';
+  var APP_VERSION = 'v77';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
