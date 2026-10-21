@@ -328,25 +328,20 @@
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + hm;
   }
   function recentSpot(at) { return (at.m && at.m !== 'main' ? mapLabel(at.m) + ' · ' : '') + spotText(at); }
-  var recentMore = false;
+  /* A single reminder: the last bottle you added, placed or linked a barcode to. The next one replaces it. */
   function renderRecent() {
     var host = $('#recentHost'); if (!host) return;
-    var list = recentList().map(function (e) { return { e: e, it: items.find(function (x) { return x.id === e.id; }) }; }).filter(function (r) { return r.it; });
-    if (!list.length) { host.innerHTML = ''; return; }
-    var lastPlaced = list.filter(function (r) { return r.e.at; })[0], today = new Date().toDateString();
-    var nToday = list.filter(function (r) { return r.e.at && new Date(r.e.t).toDateString() === today; }).length;
-    var shown = list.slice(0, recentMore ? 25 : 6);
-    host.innerHTML = '<div class="glass card recent"><h2>Where you left off</h2>' +
-      (lastPlaced ? '<p class="hint">Last shelf: <b>' + esc(recentSpot(lastPlaced.e.at)) + '</b> · ' + esc(agoText(lastPlaced.e.t)) + (nToday ? ' · ' + nToday + ' placed today' : '') + '</p><button class="btn block" type="button" data-resume="1">Continue at ' + esc(recentSpot(lastPlaced.e.at)) + '</button>' : '') +
-      '<ul class="recentlist">' + shown.map(function (r) {
-        var e = r.e, what = [];
-        if (e.added) what.push('Added'); if (e.code) what.push('Barcode saved'); if (e.at) what.push('Placed at ' + recentSpot(e.at)); if (!what.length) what.push('Edited');
-        return '<li data-rid="' + esc(r.it.id) + '"><b>' + esc(r.it.brand) + (r.it.flavor ? ' ' + esc(r.it.flavor) : '') + '</b>' + (r.it.size ? ' <small>' + esc(r.it.size) + '</small>' : '') + '<span class="rwhat">' + esc(what.join(' · ')) + '</span><em>' + esc(agoText(e.t)) + '</em></li>';
-      }).join('') + '</ul>' + (list.length > 6 ? '<button class="btn ghost block" type="button" data-rmore="1">' + (recentMore ? 'Show fewer' : 'Show more') + '</button>' : '') + '</div>';
+    var r = recentList().map(function (e) { return { e: e, it: items.find(function (x) { return x.id === e.id; }) }; }).filter(function (r) { return r.it && (r.e.added || r.e.code || r.e.at); })[0];
+    if (!r) { host.innerHTML = ''; return; }
+    var e = r.e, it = r.it, what = [], at = e.at;
+    if (!at) { var sp = itemSpots(it)[0]; if (sp) at = { m: sp.m, section: sp.section, shelf: sp.shelf }; }
+    if (e.added) what.push('Added'); if (e.code) what.push('Barcode saved'); if (e.at) what.push('Placed');
+    host.innerHTML = '<div class="glass card recent"><h2>Where you stopped</h2><ul class="recentlist"><li data-rid="' + esc(it.id) + '"><b>' + esc(it.brand) + (it.flavor ? ' ' + esc(it.flavor) : '') + '</b>' + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') +
+      '<span class="rwhat">' + esc(what.join(' · ')) + (at ? ' · ' + esc(recentSpot(at)) : '') + '</span><em>' + esc(agoText(e.t)) + '</em></li></ul>' +
+      (e.at ? '<button class="btn block" type="button" data-resume="1">Continue at ' + esc(recentSpot(e.at)) + '</button>' : '') + '</div>';
   }
   document.addEventListener('click', function (e) {
     var host = e.target.closest ? e.target.closest('#recentHost') : null; if (!host) return;
-    if (e.target.closest('[data-rmore]')) { recentMore = !recentMore; renderRecent(); return; }
     if (e.target.closest('[data-resume]')) {
       var lp = recentList().filter(function (x) { return x.at && items.some(function (i) { return i.id === x.id; }); })[0];
       openStock('stock');
@@ -1271,7 +1266,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v78';
+  var APP_VERSION = 'v79';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

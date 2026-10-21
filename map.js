@@ -34,6 +34,39 @@
     return null;
   }
 
+  /* A box may be turned: z.rot is degrees, clockwise on the plan. The turn is done in picture pixels, so sizes stay true on a wide plan. */
+  var ASP = 1;
+  function corners(z, asp) {
+    asp = asp || ASP;
+    var cx = z.x + z.w / 2, cy = z.y + z.h / 2, hw = z.w / 2 * asp, hh = z.h / 2, r = (z.rot || 0) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+    return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(function (p) { return [cx + (p[0] * c - p[1] * s) / asp, cy + (p[0] * s + p[1] * c)]; });
+  }
+  function bbox(z, asp) {
+    if (!z.rot) return { x: z.x, y: z.y, w: z.w, h: z.h };
+    var cs = corners(z, asp), xs = cs.map(function (c) { return c[0]; }), ys = cs.map(function (c) { return c[1]; });
+    var x0 = Math.min.apply(null, xs), y0 = Math.min.apply(null, ys);
+    return { x: x0, y: y0, w: Math.max.apply(null, xs) - x0, h: Math.max.apply(null, ys) - y0 };
+  }
+  /* Do two boxes sit on each other by more than t? Turned boxes are compared as true rectangles. */
+  function rectsOverlap(a, b, t) {
+    if (!a.rot && !b.rot) {
+      var w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      return w > t && h > t;
+    }
+    var pa = corners(a).map(function (c) { return [c[0] * ASP, c[1]]; }), pb = corners(b).map(function (c) { return [c[0] * ASP, c[1]]; }), k, m;
+    var axes = [];
+    [pa, pb].forEach(function (p) { for (k = 0; k < 2; k++) { var ex = p[k + 1][0] - p[k][0], ey = p[k + 1][1] - p[k][1], l = Math.hypot(ex, ey) || 1; axes.push([-ey / l, ex / l]); } });
+    for (k = 0; k < axes.length; k++) {
+      var ax = axes[k], lo1 = 1e9, hi1 = -1e9, lo2 = 1e9, hi2 = -1e9;
+      for (m = 0; m < 4; m++) {
+        var d1 = pa[m][0] * ax[0] + pa[m][1] * ax[1], d2 = pb[m][0] * ax[0] + pb[m][1] * ax[1];
+        lo1 = Math.min(lo1, d1); hi1 = Math.max(hi1, d1); lo2 = Math.min(lo2, d2); hi2 = Math.max(hi2, d2);
+      }
+      if (Math.min(hi1, hi2) - Math.max(lo1, lo2) <= t) return false;
+    }
+    return true;
+  }
+
   /* Floor fractions (u right, v down in the picture) plus a height z -> screen point. */
   function makeProj(W, H, aspect, yaw, elev, zmax, zoom, panX, panY) {
     var cy = Math.cos(yaw), sy = Math.sin(yaw), ce = Math.cos(elev), se = Math.sin(elev), D = 2.6;
@@ -103,8 +136,7 @@
     var out = [], t = 0.004, i, k;
     for (i = 0; i < zones.length; i++) for (k = i + 1; k < zones.length; k++) {
       var a = zones[i], b = zones[k];
-      var w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-      if (w > t && h > t) out.push([a, b]);
+      if (rectsOverlap(a, b, t)) out.push([a, b]);
     }
     return out;
   }
@@ -112,8 +144,7 @@
     var t = 0.004;
     return zones.some(function (b) {
       if (b === z) return false;
-      var w = Math.min(z.x + z.w, b.x + b.w) - Math.max(z.x, b.x), h = Math.min(z.y + z.h, b.y + b.h) - Math.max(z.y, b.y);
-      return w > t && h > t;
+      return rectsOverlap(z, b, t);
     });
   }
   /* Straighten the layout: edges snap to a fine grid, and boxes of nearly the same size are made the same size, but only where that does not push a box onto its neighbour. */
@@ -122,6 +153,7 @@
     function snap(v) { return Math.round(v / g) * g; }
     function r4(v) { return Math.round(v * 10000) / 10000; }
     zones.forEach(function (z) {
+      if (z.rot) return;
       var x0 = Math.max(0, snap(z.x)), y0 = Math.max(0, snap(z.y));
       var x1 = Math.min(1, snap(z.x + z.w)), y1 = Math.min(1, snap(z.y + z.h));
       var old = { x: z.x, y: z.y, w: z.w, h: z.h };
@@ -130,7 +162,7 @@
     });
     ['w', 'h'].forEach(function (key) {
       var byKind = {};
-      zones.forEach(function (z) { var k = z.kind || 'tall'; (byKind[k] = byKind[k] || []).push(z); });
+      zones.forEach(function (z) { if (z.rot) return; var k = z.kind || 'tall'; (byKind[k] = byKind[k] || []).push(z); });
       Object.keys(byKind).forEach(function (k) {
         var sorted = byKind[k].slice().sort(function (a, b) { return a[key] - b[key]; }), group = [];
         var flush = function () {
@@ -163,6 +195,7 @@
   /* st: {img, imgW, imgH, aspect, zones, yaw, elev, edit, clean, topFirst, selZoneId, selLevel, draft, dark, fast} */
   function drawScene(ctx, W, H, st) {
     var zones = st.zones || [];
+    ASP = st.aspect || ASP;
     var pal = st.dark
       ? { top: 'rgba(138,168,255,0.92)', a: 'rgba(98,126,216,0.96)', b: 'rgba(72,96,178,0.96)', line: 'rgba(255,255,255,0.35)', hi: '#34d399', hiTop: 'rgba(52,211,153,0.95)', edge: 'rgba(255,255,255,0.35)', flat: 'rgba(138,168,255,0.30)', flatLine: '#8aa8ff', floor: '#1a2338', grid: 'rgba(255,255,255,0.07)', wall: 'rgba(200,215,255,0.55)' }
       : { top: 'rgba(98,130,235,0.93)', a: 'rgba(66,94,200,0.96)', b: 'rgba(48,72,166,0.96)', line: 'rgba(255,255,255,0.5)', hi: '#15915f', hiTop: 'rgba(21,145,95,0.95)', edge: 'rgba(20,30,60,0.35)', flat: 'rgba(74,120,232,0.22)', flatLine: '#3a63c8', floor: '#f3f6fc', grid: 'rgba(60,80,130,0.13)', wall: 'rgba(40,55,100,0.55)' };
@@ -199,23 +232,83 @@
     poly(ctx, [P(0, 0, 0), P(1, 0, 0), P(1, 1, 0), P(0, 1, 0)]);
     ctx.stroke();
 
+    /* The four walls of a turned box. Each wall is drawn from its own start to its end, so shelf lines and cubby dividers follow the turn. */
+    function rotFaces(z, Z, n, sel, zp) {
+      var cs = corners(z, st.aspect), best = null, cl = cellsOf(z), longX = z.w * st.aspect >= z.h;
+      var es = [0, 1, 2, 3].map(function (e) {
+        var A = cs[e], B = cs[(e + 1) % 4], m = P((A[0] + B[0]) / 2, (A[1] + B[1]) / 2, Z / 2), S = A, E = B;
+        if (longX && e === 2) { S = cs[3]; E = cs[2]; }
+        if (!longX && e === 3) { S = cs[0]; E = cs[3]; }
+        return { e: e, A: A, B: B, S: S, E: E, t: m.t, longE: longX ? e % 2 === 0 : e % 2 === 1 };
+      }).sort(function (p, q) { return p.t - q.t; });
+      es.forEach(function (f) {
+        var pts = [P(f.A[0], f.A[1], 0), P(f.B[0], f.B[1], 0), P(f.B[0], f.B[1], Z), P(f.A[0], f.A[1], Z)], far = 0, ai;
+        for (ai = 0; ai < 4; ai++) { var pa = pts[ai], pb = pts[(ai + 1) % 4]; far += pa.X * pb.Y - pb.X * pa.Y; }
+        if (far <= 0) return;
+        function at(t, zz) { return P(f.S[0] + (f.E[0] - f.S[0]) * t, f.S[1] + (f.E[1] - f.S[1]) * t, zz); }
+        ctx.fillStyle = f.e % 2 === 0 ? zp.a : zp.b;
+        poly(ctx, pts); ctx.fill();
+        if (sel && st.selLevel !== undefined) {
+          var lv = st.selLevel ? Math.min(Math.max(st.selLevel, 1), n) : 0;
+          if (lv && n > 1) {
+            var za = st.topFirst ? Z * (1 - lv / n) : Z * (lv - 1) / n, zb = st.topFirst ? Z * (1 - (lv - 1) / n) : Z * lv / n;
+            var cc = cl[lv - 1], slot = st.selSlot && cc > 1 && st.selSlot <= cc ? st.selSlot : 0, t0 = 0, t1 = 1, show = true;
+            if (slot) { if (!f.longE) show = false; else { t0 = (slot - 1) / cc; t1 = slot / cc; } }
+            if (show) {
+              var bq = [at(t0, za), at(t1, za), at(t1, zb), at(t0, zb)], bA = 0, bi;
+              ctx.fillStyle = pal.hi; ctx.globalAlpha = 0.85; poly(ctx, bq); ctx.fill(); ctx.globalAlpha = 1;
+              for (bi = 0; bi < 4; bi++) { var b1 = bq[bi], b2 = bq[(bi + 1) % 4]; bA += b1.X * b2.Y - b2.X * b1.Y; }
+              bA = Math.abs(bA) / 2;
+              if (!best || bA > best.a) best = { a: bA, X: (bq[0].X + bq[1].X + bq[2].X + bq[3].X) / 4, Y: (bq[0].Y + bq[1].Y + bq[2].Y + bq[3].Y) / 4 };
+            }
+          }
+        }
+        ctx.strokeStyle = pal.line; ctx.lineWidth = 1;
+        for (var k = 1; k < n; k++) { var l1 = at(0, Z * k / n), l2 = at(1, Z * k / n); ctx.beginPath(); ctx.moveTo(l1.X, l1.Y); ctx.lineTo(l2.X, l2.Y); ctx.stroke(); }
+        if (f.longE && n > 1 && z.cells) {
+          ctx.lineWidth = 1.5;
+          for (var sk = 1; sk <= n; sk++) {
+            var sc = cl[sk - 1]; if (sc < 2) continue;
+            var br = bandRange(Z, n, sk, st.topFirst), si;
+            for (si = 1; si < sc; si++) { var d1 = at(si / sc, br[0]), d2 = at(si / sc, br[1]); ctx.beginPath(); ctx.moveTo(d1.X, d1.Y); ctx.lineTo(d2.X, d2.Y); ctx.stroke(); }
+          }
+          ctx.lineWidth = 1;
+        }
+        ctx.strokeStyle = pal.edge; poly(ctx, pts); ctx.stroke();
+      });
+      return best;
+    }
     var result = { proj: P, dot: null, handles: {} };
     var labels = [];
 
     if (st.edit) {
       zones.forEach(function (z) {
-        var a = P(z.x, z.y, 0), b = P(z.x + z.w, z.y + z.h, 0);
-        var bad = st.overlapIds && st.overlapIds[z.id];
+        var cs = corners(z, st.aspect).map(function (c) { return P(c[0], c[1], 0); });
+        var bad = st.overlapIds && st.overlapIds[z.id], act = st.activeId === z.id;
         ctx.fillStyle = bad ? 'rgba(235,70,70,0.30)' : pal.flat;
-        ctx.strokeStyle = bad ? '#eb4646' : pal.flatLine;
-        ctx.lineWidth = bad ? 3 : 2;
-        ctx.fillRect(a.X, a.Y, b.X - a.X, b.Y - a.Y);
-        ctx.strokeRect(a.X, a.Y, b.X - a.X, b.Y - a.Y);
-        ctx.fillStyle = pal.flatLine;
-        ctx.fillRect(b.X - 8, b.Y - 8, 16, 16);
-        labels.push({ text: z.name || 'Unnamed', X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2, w: b.X - a.X });
-        result.handles[z.id] = { X: b.X, Y: b.Y };
+        ctx.strokeStyle = bad ? '#eb4646' : (act ? pal.hi : pal.flatLine);
+        ctx.lineWidth = bad || act ? 3 : 2;
+        poly(ctx, cs); ctx.fill(); ctx.stroke();
+        var mx = (cs[0].X + cs[2].X) / 2, my = (cs[0].Y + cs[2].Y) / 2, rh = null;
+        ctx.fillStyle = act ? pal.hi : pal.flatLine;
+        (act ? [0, 1, 2, 3] : [2]).forEach(function (k) { ctx.fillRect(cs[k].X - 8, cs[k].Y - 8, 16, 16); });
+        if (act) {
+          var tx = (cs[0].X + cs[1].X) / 2, ty = (cs[0].Y + cs[1].Y) / 2, ddx = tx - mx, ddy = ty - my, dl = Math.hypot(ddx, ddy) || 1;
+          rh = { X: tx + ddx / dl * 26, Y: ty + ddy / dl * 26 };
+          ctx.strokeStyle = pal.hi; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(rh.X, rh.Y); ctx.stroke();
+          ctx.beginPath(); ctx.arc(rh.X, rh.Y, 9, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke();
+          ctx.beginPath(); ctx.arc(rh.X, rh.Y, 4, 0.3, Math.PI * 1.7); ctx.stroke();
+        }
+        labels.push({ text: z.name || 'Unnamed', X: mx, Y: my, w: Math.hypot(cs[1].X - cs[0].X, cs[1].Y - cs[0].Y) });
+        result.handles[z.id] = { c: cs, rot: rh };
       });
+      if (st.guides) {
+        ctx.strokeStyle = pal.hi; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        (st.guides.x || []).forEach(function (u) { var g1 = P(u, 0, 0), g2 = P(u, 1, 0); ctx.beginPath(); ctx.moveTo(g1.X, g1.Y); ctx.lineTo(g2.X, g2.Y); ctx.stroke(); });
+        (st.guides.y || []).forEach(function (v) { var g1 = P(0, v, 0), g2 = P(1, v, 0); ctx.beginPath(); ctx.moveTo(g1.X, g1.Y); ctx.lineTo(g2.X, g2.Y); ctx.stroke(); });
+        ctx.setLineDash([]);
+      }
       if (st.draft) {
         var da = P(st.draft.x, st.draft.y, 0), db = P(st.draft.x + st.draft.w, st.draft.y + st.draft.h, 0);
         ctx.setLineDash([6, 4]);
@@ -245,7 +338,8 @@
         }).sort(function (p, q) { return p.t - q.t; });
 
         var bandBest = null;
-        faces.forEach(function (f) {
+        if (z.rot) bandBest = rotFaces(z, Z, n, sel, zp);
+        (z.rot ? [] : faces).forEach(function (f) {
           var FA = f.c[0], FB = f.c[1];
           /* Only faces that look toward the camera are drawn, so from one side you never see the shelves of the other side. */
           var fp = [P(FA[0], FA[1], 0), P(FB[0], FB[1], 0), P(FB[0], FB[1], Z), P(FA[0], FA[1], Z)], far = 0, ai;
@@ -255,7 +349,7 @@
           var alongX = FA[1] === FB[1], lo = alongX ? Math.min(FA[0], FB[0]) : Math.min(FA[1], FB[1]), hi = alongX ? Math.max(FA[0], FB[0]) : Math.max(FA[1], FB[1]);
           var cover = [];
           zones.forEach(function (q) {
-            if (q === z || zoneH(q) < Z - 0.002) return;
+            if (q === z || q.rot || zoneH(q) < Z - 0.002) return;
             var qx1 = q.x + q.w, qy1 = q.y + q.h, tol = 0.004;
             if (alongX) {
               var yy = FA[1];
@@ -331,7 +425,7 @@
           });
         });
 
-        var top = [P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)];
+        var top = corners(z, st.aspect).map(function (c) { return P(c[0], c[1], Z); });
         ctx.fillStyle = sel ? pal.hiTop : zp.top;
         poly(ctx, top);
         ctx.fill();
@@ -372,7 +466,7 @@
     return result;
   }
 
-  var api = { makeProj: makeProj, drawScene: drawScene, shelfNumber: shelfNumber, levelZ: levelZ, findZone: findZone, zoneH: zoneH, tidyZones: tidyZones };
+  var api = { corners: corners, bbox: bbox, rectsOverlap: rectsOverlap, makeProj: makeProj, drawScene: drawScene, shelfNumber: shelfNumber, levelZ: levelZ, findZone: findZone, zoneH: zoneH, tidyZones: tidyZones };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; }
   if (typeof document === 'undefined') return;
 
@@ -388,6 +482,9 @@
   var focusDot = false, zoom = 1, panX = 0, panY = 0, pointers = {}, pinch = null, lastTap = 0;
   var tapStart = null, lastTapUp = 0, holdTimer = null;
   function clearHold() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } var w = $('#mapCv'); if (w) w.classList.remove('grabbed'); }
+  var activeZ = null, snapOn = true, SNAPKEY = 'shelf-finder-snap-v1';
+  try { snapOn = localStorage.getItem(SNAPKEY) !== '0'; } catch (e) {}
+  function A() { if (imgEl && imgEl.naturalHeight) ASP = imgEl.naturalWidth / imgEl.naturalHeight; return ASP; }
   var yaw = 0, elev = 0.95, edit = false, sel = null, drawing = null, pendingName = '', fast = false, raf = 0, last = null;
   var zoneEditing = null;
 
@@ -534,7 +631,7 @@
     last = drawScene(ctx, W, H, {
       img: imgEl, imgW: imgEl.naturalWidth, imgH: imgEl.naturalHeight, aspect: imgEl.naturalWidth / imgEl.naturalHeight,
       zones: map.zones, yaw: yaw, elev: elev, edit: edit, clean: map.look !== 'photo', topFirst: map.topFirst !== false,
-      zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, selSlot: z ? sel.slot : 0, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null,
+      zoom: zoom, panX: panX, panY: panY, selZoneId: z ? z.id : null, selLevel: z ? sel.level : undefined, selSlot: z ? sel.slot : 0, draft: drawing && drawing.mode === 'draw' ? drawing.rect : null, activeId: activeZ, guides: drawing && drawing.guides ? drawing.guides : null,
       dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches), fast: fast, overlapIds: edit ? overlapIdMap() : null
     });
     if (focusDot && z && last.dot && !edit) {
@@ -556,11 +653,13 @@
 
   function overlapIdMap() {
     var o = {}; if (!map) return o;
+    A();
     overlapPairs(map.zones).forEach(function (p) { o[p[0].id] = 1; o[p[1].id] = 1; });
     return o;
   }
   function showOverlapMsg() {
     var el = $('#mapOverlapMsg'); if (!el) return;
+    A();
     var ps = map && edit ? overlapPairs(map.zones) : [];
     if (!ps.length) { el.hidden = true; return; }
     el.hidden = false;
@@ -671,7 +770,8 @@
     $('#zShelves').value = z ? (z.shelves || 5) : 5;
     zoneCells = z && z.cells ? cellsOf(z).slice() : [];
     setKind(z && z.kind ? z.kind : 'tall');
-    $('#zDelete').hidden = !z; $('#zAddNext').hidden = !z;
+    $('#zDelete').hidden = !z; $('#zAddNext').hidden = !z; $('#zDuplicate').hidden = !z;
+    $('#zRot').value = z && z.rot ? z.rot : 0;
     var rn = z && /^[A-Za-z]+\d*[a-z]*$/.test(String(z.name || '').trim()) ? /^[A-Za-z]+/.exec(String(z.name).trim())[0].toUpperCase() : '';
     $('#zRenumber').hidden = !rn; $('#zRenumber').textContent = rn ? 'Renumber all ' + rn + ' boxes in order' : 'Renumber in order';
     setHs(z && z.hs ? z.hs : 1);
@@ -721,7 +821,15 @@
     for (i = 0; i < n; i++) {
       var nm = letters ? base + String.fromCharCode(97 + i) : base + (start + i);
       var r = dir === 'x' ? { x: z.x + z.w * i / n, y: z.y, w: z.w / n, h: z.h } : { x: z.x, y: z.y + z.h * i / n, w: z.w, h: z.h / n };
-      parts.push({ id: newId(), name: nm, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs });
+      if (z.rot) {
+        var asp = A(), rr = z.rot * Math.PI / 180, cc = Math.cos(rr), ss = Math.sin(rr), px = dir === 'x' ? z.w / n : z.w, py = dir === 'x' ? z.h : z.h / n;
+        var lx = dir === 'x' ? ((i + 0.5) / n - 0.5) * z.w * asp : 0, ly = dir === 'x' ? 0 : ((i + 0.5) / n - 0.5) * z.h;
+        var ncx = (z.x + z.w / 2) * asp + lx * cc - ly * ss, ncy = z.y + z.h / 2 + lx * ss + ly * cc;
+        r = { x: ncx / asp - px / 2, y: ncy - py / 2, w: px, h: py };
+      }
+      var part = { id: newId(), name: nm, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs };
+      if (z.rot) part.rot = z.rot;
+      parts.push(part);
     }
     var at = map.zones.indexOf(z);
     map.zones.splice.apply(map.zones, [at, 1].concat(parts));
@@ -756,12 +864,42 @@
     }
     return strict ? null : { x: Math.min(Math.max(0, z.x + z.w * 0.3), 1 - z.w), y: Math.min(Math.max(0, z.y + z.h * 0.3), 1 - z.h), w: z.w, h: z.h };
   }
+  /* A free spot of the same size and angle beside a box, measured along the box's own sides. */
+  function freeSpotFor(z) {
+    var asp = A(), r = (z.rot || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), g = 0.004, W = (z.w + g) * asp, H = z.h + g, cx = (z.x + z.w / 2) * asp, cy = z.y + z.h / 2, i;
+    var offs = [[W, 0], [0, H], [-W, 0], [0, -H]];
+    for (i = 0; i < offs.length; i++) {
+      var ncx = cx + offs[i][0] * c - offs[i][1] * sn, ncy = cy + offs[i][0] * sn + offs[i][1] * c;
+      var t = { x: ncx / asp - z.w / 2, y: ncy - z.h / 2, w: z.w, h: z.h }; if (z.rot) t.rot = z.rot;
+      var b = bbox(t, asp);
+      if (b.x >= 0 && b.y >= 0 && b.x + b.w <= 1 && b.y + b.h <= 1 && !overlapsAny(t, map.zones)) return t;
+    }
+    return null;
+  }
+  /* Copy a box with everything it has (shelves, sections, height, angle) under a new name, then open it so it can be renamed. */
+  function duplicateZone() {
+    var z = zoneEditing && map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
+    if (!z) return;
+    var nz = JSON.parse(JSON.stringify(z)), base = String(z.name || '').trim(), nm;
+    nz.id = newId();
+    if (/\d$/.test(base)) nm = nextBoxName(base);
+    else { var k = 1; nm = base + ' copy'; while (findZone(map.zones, nm)) { k++; nm = base + ' copy ' + k; } }
+    nz.name = nm;
+    var spot = freeSpotFor(z);
+    if (spot) { nz.x = spot.x; nz.y = spot.y; }
+    else { nz.x = clamp(z.x + 0.03, 0, 1 - z.w); nz.y = clamp(z.y + 0.03, 0, 1 - z.h); }
+    map.zones.push(nz); activeZ = nz.id;
+    if (!persist()) toast('This phone has no room left to keep the map.');
+    closeZone(); notify(); refresh(); showOverlapMsg();
+    openZone(nz);
+    toast('Copied as ' + nm + '. Rename it if you like.');
+  }
   function addNextTo(z) {
     if (!z) return;
-    var r = roomNextTo(z);
+    var r = z.rot ? freeSpotFor(z) : roomNextTo(z);
     if (!r) { $('#zoneErr').textContent = 'No empty room next to ' + z.name + ' in line with the others. Split ' + z.name + ' into two instead, then use Renumber.'; $('#zoneErr').hidden = false; return; }
     var nz = { id: newId(), name: nextBoxName(z.name), x: r.x, y: r.y, w: r.w, h: r.h, shelves: z.shelves || 5, kind: z.kind || 'tall' };
-    if (z.hs) nz.hs = z.hs; if (z.cells) nz.cells = z.cells.slice();
+    if (z.hs) nz.hs = z.hs; if (z.cells) nz.cells = z.cells.slice(); if (z.rot) nz.rot = z.rot;
     map.zones.push(nz);
     if (!persist()) toast('This phone has no room left to keep the map.');
     closeZone(); notify(); refresh();
@@ -796,6 +934,8 @@
     while (cs.length < sh) cs.push(1);
     if (shelfy && cs.some(function (v) { return v > 1; })) z.cells = cs; else delete z.cells;
   }
+  function normRot(v) { v = parseFloat(v); return isFinite(v) ? Math.round((((v + 540) % 360) - 180) * 10) / 10 : 0; }
+  function rotNow() { var r = normRot($('#zRot').value); return Math.abs(r) < 0.5 ? 0 : r; }
   function saveZone() {
     var name = $('#zName').value.trim(), sh = Math.round(parseFloat($('#zShelves').value));
     if (!name) { $('#zoneErr').textContent = 'Enter the aisle or section name, for example Aisle 3.'; $('#zoneErr').hidden = false; return; }
@@ -804,12 +944,13 @@
     if (dup) { $('#zoneErr').textContent = 'There is already a box called ' + dup.name + '. Pick a different name so bottles go to the right one.'; $('#zoneErr').hidden = false; return; }
     if (zoneEditing) {
       var z = map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
-      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; applyCells(z, sh); }
+      if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; applyCells(z, sh); if (rotNow()) z.rot = rotNow(); else delete z.rot; activeZ = z.id; }
     } else if (openZone.rect) {
       var r = openZone.rect;
       var nz = { id: newId(), name: name, x: r.x, y: r.y, w: r.w, h: r.h, shelves: sh, kind: zoneKind, hs: zoneHs === 1 ? undefined : zoneHs };
       applyCells(nz, sh);
-      map.zones.push(nz);
+      if (rotNow()) nz.rot = rotNow();
+      map.zones.push(nz); activeZ = nz.id;
     }
     if (pendingName && pendingName.toLowerCase() === name.toLowerCase()) pendingName = '';
     if (!persist()) toast('This phone has no room left to keep the map.');
@@ -822,6 +963,7 @@
     var dz = map.zones.filter(function (q) { return q.id === zoneEditing; })[0], held2 = 0;
     if (dz) items().forEach(function (it) { if (String(spot(it, cur).section).trim().toLowerCase() === String(dz.name).trim().toLowerCase()) held2++; });
     map.zones = map.zones.filter(function (q) { return q.id !== zoneEditing; });
+    if (activeZ === zoneEditing) activeZ = null;
     persist();
     closeZone();
     notify();
@@ -872,13 +1014,45 @@
   }
   function pinchDist() { var k = Object.keys(pointers); return Math.hypot(pointers[k[0]].x - pointers[k[1]].x, pointers[k[0]].y - pointers[k[1]].y) || 1; }
   function pinchMid() { var k = Object.keys(pointers); return { x: (pointers[k[0]].x + pointers[k[1]].x) / 2, y: (pointers[k[0]].y + pointers[k[1]].y) / 2 }; }
+  function origOf(z) { var o = { x: z.x, y: z.y, w: z.w, h: z.h }; if (z.rot) o.rot = z.rot; return o; }
+  function restoreOrig(z, o) { z.x = o.x; z.y = o.y; z.w = o.w; z.h = o.h; if (o.rot) z.rot = o.rot; else delete z.rot; }
+  function inZone(z, uv) {
+    if (!z.rot) return uv.u >= z.x && uv.u <= z.x + z.w && uv.v >= z.y && uv.v <= z.y + z.h;
+    var asp = A(), r = z.rot * Math.PI / 180, dx = (uv.u - (z.x + z.w / 2)) * asp, dy = uv.v - (z.y + z.h / 2), c = Math.cos(r), sn = Math.sin(r);
+    return Math.abs(dx * c + dy * sn) <= z.w * asp / 2 && Math.abs(-dx * sn + dy * c) <= z.h / 2;
+  }
+  /* Snapping: edges line up with the edges of other boxes and the border of the plan. */
+  function edgeCands(skipId) {
+    var asp = A(), xs = [0, 1], ys = [0, 1];
+    map.zones.forEach(function (q) { if (q.id === skipId) return; var b = bbox(q, asp); xs.push(b.x, b.x + b.w); ys.push(b.y, b.y + b.h); });
+    return { xs: xs, ys: ys };
+  }
+  function snapAxis(v, arr, T) { var best = null, bd = T; arr.forEach(function (a) { var d = Math.abs(a - v); if (d < bd) { bd = d; best = a; } }); return best; }
+  function snapT() { return 0.012 / Math.max(1, zoom); }
+  function snapPt(uv, skipId, g) {
+    var c = edgeCands(skipId), T = snapT(), u = uv.u, v = uv.v, a = snapAxis(u, c.xs, T), b = snapAxis(v, c.ys, T);
+    if (a !== null) { u = a; if (g) g.x.push(a); }
+    if (b !== null) { v = b; if (g) g.y.push(b); }
+    return { u: u, v: v };
+  }
+  function resizeBy(d, uv, g) {
+    var o = d.orig, asp = A(), r = (o.rot || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), k = d.corner, F = corners(o, asp)[(k + 2) % 4];
+    var pu = clamp(uv.u, 0, 1), pv = clamp(uv.v, 0, 1);
+    if (snapOn && !o.rot) { var q = snapPt({ u: pu, v: pv }, d.zone.id, g); pu = q.u; pv = q.v; }
+    var dx = (pu - F[0]) * asp, dy = pv - F[1], lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+    var sx = (k === 1 || k === 2) ? 1 : -1, sy = (k === 2 || k === 3) ? 1 : -1;
+    var nw = Math.max(0.03 * asp, lx * sx), nh = Math.max(0.03, ly * sy);
+    var Fx = F[0] * asp, Fy = F[1], Dx = Fx + c * sx * nw - sn * sy * nh, Dy = Fy + sn * sx * nw + c * sy * nh;
+    var cx = (Fx + Dx) / 2 / asp, cy = (Fy + Dy) / 2;
+    d.zone.w = nw / asp; d.zone.h = nh; d.zone.x = cx - d.zone.w / 2; d.zone.y = cy - d.zone.h / 2;
+  }
   function onDown(e) {
     if (!map || !imgEl || !last) return;
     var p = pt(e), cv = $('#mapCanvas');
     try { cv.setPointerCapture(e.pointerId); } catch (x) {}
     pointers[e.pointerId] = p;
     if (Object.keys(pointers).length === 2) {
-      if (drawing && drawing.zone && drawing.orig) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; }
+      if (drawing && drawing.zone && drawing.orig) restoreOrig(drawing.zone, drawing.orig);
       drawing = null;
       pinch = { d: pinchDist(), z: zoom, mid: pinchMid() };
       lastTapUp = 0; tapStart = null;
@@ -886,19 +1060,29 @@
       return;
     }
     if (!edit) { tapStart = { t: Date.now(), x: p.x, y: p.y }; drawing = { mode: 'orbit', x: p.x, sx: p.x, sy: p.y, moved: false }; fast = true; return; }
-    var uv = unproject(p.x, p.y), hit = null, mode = 'draw', i, z;
-    for (i = map.zones.length - 1; i >= 0; i--) {
-      z = map.zones[i];
-      var h = last.handles[z.id];
-      if (h && Math.abs(p.x - h.X) < 22 && Math.abs(p.y - h.Y) < 22) { hit = z; mode = 'resize'; break; }
+    A();
+    var uv = unproject(p.x, p.y), hit = null, mode = 'draw', corner = -1, i, z, h;
+    var act = activeZ ? map.zones.filter(function (q) { return q.id === activeZ; })[0] : null;
+    if (act && last.handles[act.id]) {
+      h = last.handles[act.id];
+      if (h.rot && Math.hypot(p.x - h.rot.X, p.y - h.rot.Y) < 20) { hit = act; mode = 'rotate'; }
+      else for (i = 0; i < 4; i++) if (Math.abs(p.x - h.c[i].X) < 20 && Math.abs(p.y - h.c[i].Y) < 20) { hit = act; mode = 'resize'; corner = i; break; }
     }
     if (!hit) {
       for (i = map.zones.length - 1; i >= 0; i--) {
         z = map.zones[i];
-        if (uv.u >= z.x && uv.u <= z.x + z.w && uv.v >= z.y && uv.v <= z.y + z.h) { hit = z; mode = 'move'; break; }
+        h = last.handles[z.id];
+        if (h && Math.abs(p.x - h.c[2].X) < 22 && Math.abs(p.y - h.c[2].Y) < 22) { hit = z; mode = 'resize'; corner = 2; break; }
       }
     }
-    drawing = { mode: mode, zone: hit, sx: p.x, sy: p.y, start: uv, moved: false, armed: e.pointerType === 'mouse', orig: hit ? { x: hit.x, y: hit.y, w: hit.w, h: hit.h } : null, rect: { x: uv.u, y: uv.v, w: 0, h: 0 } };
+    if (!hit) {
+      for (i = map.zones.length - 1; i >= 0; i--) {
+        z = map.zones[i];
+        if (inZone(z, uv)) { hit = z; mode = 'move'; break; }
+      }
+    }
+    var st0 = mode === 'draw' && snapOn ? snapPt(uv, null, null) : uv;
+    drawing = { mode: mode, zone: hit, corner: corner, sx: p.x, sy: p.y, start: st0, moved: false, armed: e.pointerType === 'mouse', orig: hit ? origOf(hit) : null, rect: { x: st0.u, y: st0.v, w: 0, h: 0 } };
     /* On a touch screen a plain swipe scrolls the page. Boxes only move, resize or get drawn after a short press and hold. */
     if (!drawing.armed) {
       var dd = drawing;
@@ -944,18 +1128,34 @@
     if (Math.abs(p.x - drawing.sx) + Math.abs(p.y - drawing.sy) > 6) drawing.moved = true;
     if (!drawing.armed) { if (drawing.moved) { clearHold(); drawing = null; } return; }
     if (!drawing.moved) return;
-    var uv = unproject(p.x, p.y), d = drawing;
+    var uv = unproject(p.x, p.y), d = drawing, g = { x: [], y: [] }, asp = A();
     if (d.mode === 'draw') {
-      var x0 = clamp(Math.min(d.start.u, uv.u), 0, 1), x1 = clamp(Math.max(d.start.u, uv.u), 0, 1);
-      var y0 = clamp(Math.min(d.start.v, uv.v), 0, 1), y1 = clamp(Math.max(d.start.v, uv.v), 0, 1);
+      var en = snapOn ? snapPt(uv, null, g) : uv;
+      var x0 = clamp(Math.min(d.start.u, en.u), 0, 1), x1 = clamp(Math.max(d.start.u, en.u), 0, 1);
+      var y0 = clamp(Math.min(d.start.v, en.v), 0, 1), y1 = clamp(Math.max(d.start.v, en.v), 0, 1);
       d.rect = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     } else if (d.mode === 'move') {
-      d.zone.x = clamp(d.orig.x + (uv.u - d.start.u), 0, 1 - d.orig.w);
-      d.zone.y = clamp(d.orig.y + (uv.v - d.start.v), 0, 1 - d.orig.h);
+      var bb = bbox(d.orig, asp), o = d.orig;
+      var mdx = clamp(uv.u - d.start.u, -bb.x, 1 - bb.x - bb.w), mdy = clamp(uv.v - d.start.v, -bb.y, 1 - bb.y - bb.h);
+      var nx = o.x + mdx, ny = o.y + mdy;
+      if (snapOn && !o.rot) {
+        var c = edgeCands(d.zone.id), T = snapT(), bx = null, by = null;
+        [nx, nx + o.w].forEach(function (ed) { var sv = snapAxis(ed, c.xs, T); if (sv !== null && (bx === null || Math.abs(sv - ed) < Math.abs(bx.d))) bx = { d: sv - ed, s: sv }; });
+        [ny, ny + o.h].forEach(function (ed) { var sv = snapAxis(ed, c.ys, T); if (sv !== null && (by === null || Math.abs(sv - ed) < Math.abs(by.d))) by = { d: sv - ed, s: sv }; });
+        if (bx) { nx += bx.d; g.x.push(bx.s); }
+        if (by) { ny += by.d; g.y.push(by.s); }
+      }
+      d.zone.x = clamp(nx, 0, 1 - o.w); d.zone.y = clamp(ny, 0, 1 - o.h);
+      if (o.rot) { d.zone.x = o.x + mdx; d.zone.y = o.y + mdy; }
     } else if (d.mode === 'resize') {
-      d.zone.w = clamp(d.orig.w + (uv.u - d.start.u), 0.03, 1 - d.orig.x);
-      d.zone.h = clamp(d.orig.h + (uv.v - d.start.v), 0.03, 1 - d.orig.y);
+      resizeBy(d, uv, g);
+    } else if (d.mode === 'rotate') {
+      var ro = d.orig, ang = Math.atan2(uv.v - (ro.y + ro.h / 2), uv.u * asp - (ro.x + ro.w / 2) * asp) * 180 / Math.PI + 90;
+      if (snapOn) { var n15 = Math.round(ang / 15) * 15; if (Math.abs(ang - n15) < 4) ang = n15; }
+      ang = Math.round((((ang + 540) % 360) - 180) * 10) / 10;
+      if (Math.abs(ang) < 0.5) delete d.zone.rot; else d.zone.rot = ang;
     }
+    d.guides = g.x.length || g.y.length ? g : null;
     schedule();
   }
   function onUp(e) {
@@ -979,10 +1179,11 @@
       return;
     }
     if (d.mode === 'draw') {
-      if (d.moved && d.rect.w > 0.03 && d.rect.h > 0.03) openZone(null, d.rect);
+      if (d.moved && d.rect.w > 0.03 && d.rect.h > 0.03) { activeZ = null; openZone(null, d.rect); }
     } else if (!d.moved) {
-      if (d.mode === 'move') openZone(d.zone);
+      if (d.mode === 'move') { activeZ = d.zone.id; openZone(d.zone); }
     } else {
+      activeZ = d.zone.id;
       persist(); showOverlapMsg();
     }
     schedule();
@@ -997,7 +1198,7 @@
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
-    cv.addEventListener('pointercancel', function (e) { clearHold(); if (drawing && drawing.zone && drawing.orig && drawing.armed) { drawing.zone.x = drawing.orig.x; drawing.zone.y = drawing.orig.y; drawing.zone.w = drawing.orig.w; drawing.zone.h = drawing.orig.h; } delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
+    cv.addEventListener('pointercancel', function (e) { clearHold(); if (drawing && drawing.zone && drawing.orig && drawing.armed) restoreOrig(drawing.zone, drawing.orig); delete pointers[e.pointerId]; if (Object.keys(pointers).length < 2) pinch = null; drawing = null; fast = false; schedule(); });
     cv.addEventListener('wheel', function (e) { if (!map || !imgEl) return; e.preventDefault(); var p = pt(e); setZoom(zoom * Math.exp(-e.deltaY * 0.002), p.x, p.y); }, { passive: false });
     $('#mapZoomIn').addEventListener('click', function () { setZoom(zoom * 1.6); });
     $('#mapZoomOut').addEventListener('click', function () { setZoom(zoom / 1.6); });
@@ -1014,9 +1215,17 @@
     });
     $('#mapEditBtn').addEventListener('click', function () {
       edit = !edit;
-      if (edit) { savedView = { yaw: yaw, elev: elev }; sel = sel; } else restoreView();
+      if (edit) { savedView = { yaw: yaw, elev: elev }; sel = sel; activeZ = null; } else restoreView();
       refresh();
     });
+    $('#zDuplicate').addEventListener('click', duplicateZone);
+    function turn(d) { $('#zRot').value = d === 0 ? 0 : normRot(normRot($('#zRot').value) + d); }
+    $('#zRotL').addEventListener('click', function () { turn(-15); });
+    $('#zRotR').addEventListener('click', function () { turn(15); });
+    $('#zRot0').addEventListener('click', function () { turn(0); });
+    function snapLabel() { var b = $('#mapSnapBtn'); b.textContent = 'Snap to neighbours: ' + (snapOn ? 'On' : 'Off'); b.setAttribute('aria-pressed', String(snapOn)); }
+    snapLabel();
+    $('#mapSnapBtn').addEventListener('click', function () { snapOn = !snapOn; try { localStorage.setItem(SNAPKEY, snapOn ? '1' : '0'); } catch (e) {} snapLabel(); toast(snapOn ? 'Boxes now snap to neighbouring edges.' : 'Snapping is off. Boxes go exactly where you drop them.'); });
     $('#mapUndoBtn').addEventListener('click', undoMap);
     $('#mapRedoBtn').addEventListener('click', redoMap);
     $('#mapResetBtn').addEventListener('click', function () {
@@ -1030,7 +1239,7 @@
     $('#segPhoto').addEventListener('click', function () { map.look = 'photo'; persist(); refresh(); });
     $('#mapTidyBtn').addEventListener('click', function () {
       if (!map.zones.length) { toast('Mark a section first.'); return; }
-      tidyZones(map.zones);
+      A(); tidyZones(map.zones);
       persist();
       schedule();
       toast('Straightened and evened out');
@@ -1182,6 +1391,7 @@
   }
 
   root.ShelfMap = {
+    handles: function () { return last ? last.handles : null; },
     debug: function () { return { zoom: zoom, panX: panX, panY: panY, yaw: yaw, pointers: Object.keys(pointers).length }; },
     coldNames: function () { return coldSet; },
     maps: function () { return [{ id: 'main', name: 'Store' }].concat(extras.map(function (m) { return { id: m.id, name: m.name || 'Map' }; })); },

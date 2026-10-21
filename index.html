@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=78">
+<link rel="stylesheet" href="style.css?v=79">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -80,11 +80,12 @@
       <label class="tiltrow" for="mapTilt"><span>Tilt</span><input id="mapTilt" type="range" min="25" max="90" value="54"></label>
       <div class="glass card" id="mapEditHelp" hidden>
         <h2>Trace your sections</h2>
-        <p>Swipe to scroll the page. Tap + Add a box, or tap a box and choose Add next one to get the next number beside it (A3 gives A4). You can also press and hold on the photo until it buzzes, then drag to draw a box. Tap a box to rename or delete it. Press and hold a box, then drag, to move it, or hold its corner square and drag to resize it. Tidy up then straightens everything into a neat layout.</p>
+        <p>Swipe to scroll the page. Tap + Add a box, or tap a box and choose Add next one to get the next number beside it (A3 gives A4). You can also press and hold on the photo until it buzzes, then drag to draw a box. Tap a box to rename or delete it. Press and hold a box, then drag, to move it. After you tap a box it shows four corner squares to drag for resizing and a round handle on top to turn it. Edges snap to neighbouring boxes (switch that off below). Duplicate copies a box with its shelves. Tidy up straightens everything into a neat layout.</p>
         <p id="mapUnplaced"></p>
         <p class="hint errtxt" id="mapOverlapMsg" hidden></p>
         <button class="btn block" id="mapAddBox" type="button">+ Add a box</button>
         <button class="btn block ghost" id="mapTidyBtn" type="button">Tidy up</button>
+        <button class="btn block ghost" id="mapSnapBtn" type="button" aria-pressed="true">Snap to neighbours: On</button>
         <h2 style="margin-top:18px">Change many boxes at once</h2>
         <p>Type the box names or ranges, pick a type, and tap Apply. For example <b>1-17, FD</b> or <b>C10-C17</b>.</p>
         <div class="field full"><input id="bulkNames" placeholder="1-17, FD" autocomplete="off" autocapitalize="characters"></div>
@@ -254,11 +255,13 @@
     <div class="field full" id="zShelvesField"><label for="zShelves">Number of shelves</label><input id="zShelves" type="number" min="1" max="12" inputmode="numeric" value="5"></div>
     <div class="field full" id="zCellsField"><label>Sections on each shelf</label><p class="hint">Some shelves have dividers that make cubbies. Set how many each shelf has, counted from the left of the map (or from the top for an aisle that runs up and down). Leave 1 for an open shelf.</p><div id="zCells"></div></div>
     <div class="field full" id="zHeightField"><label>Height</label><div class="seg" id="zHeight"><button type="button" data-hs="0.7" aria-pressed="false">Short</button><button type="button" data-hs="1" aria-pressed="true">Normal</button><button type="button" data-hs="1.35" aria-pressed="false">Tall</button></div></div>
+    <div class="field full" id="zRotField"><label for="zRot">Angle, to turn a slanted shelf</label><div class="inrow"><button class="btn ghost" id="zRotL" type="button">&minus;15&deg;</button><input id="zRot" type="number" min="-180" max="180" step="1" inputmode="numeric" value="0" aria-label="Angle in degrees"><button class="btn ghost" id="zRotR" type="button">+15&deg;</button><button class="btn ghost" id="zRot0" type="button">Straight</button></div></div>
     <div class="field full" id="zSplitBox" hidden><label for="zSplitN">Split into equal parts (how many, first number)</label><div class="inrow"><input id="zSplitN" type="number" min="2" max="12" inputmode="numeric" value="3" aria-label="Number of parts"><input id="zSplitStart" type="number" min="0" inputmode="numeric" value="1" aria-label="First number" title="Number the first part starts at"><button class="btn ghost" id="zSplitX" type="button">Left to right</button><button class="btn ghost" id="zSplitY" type="button">Top to bottom</button></div></div>
     <p class="err" id="zoneErr" hidden></p>
     <div class="sheet-actions">
       <button class="btn grow" type="submit">Save</button>
       <button class="btn ghost" id="zAddNext" type="button" hidden>Add next one</button>
+      <button class="btn ghost" id="zDuplicate" type="button" hidden>Duplicate</button>
       <button class="btn ghost" id="zRenumber" type="button" hidden>Renumber in order</button>
       <button class="btn ghost" id="zDelete" type="button" hidden>Delete</button>
       <button class="btn ghost" id="zCancel" type="button">Cancel</button>
@@ -294,11 +297,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=78"></script>
-<script src="app.js?v=78"></script>
-<script src="photo.js?v=78"></script>
-<script src="scan.js?v=78"></script>
-<script src="map.js?v=78"></script>
-<script src="backup.js?v=78"></script>
+<script src="search.js?v=79"></script>
+<script src="app.js?v=79"></script>
+<script src="photo.js?v=79"></script>
+<script src="scan.js?v=79"></script>
+<script src="map.js?v=79"></script>
+<script src="backup.js?v=79"></script>
 </body>
 </html>
