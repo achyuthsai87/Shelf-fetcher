@@ -549,3 +549,6 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 
 .poplist { display: grid; gap: 6px; max-height: 38vh; overflow: auto; }
 .popcard .linkrow { text-align: left; width: 100%; }
+.qbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.qbar br { flex-basis: 100%; height: 0; }
+.qbar .chip { min-width: 38px; padding: 8px 12px; }

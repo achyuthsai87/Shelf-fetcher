@@ -86,6 +86,7 @@
   function hl(text) { return window.ShelfSearch.highlight(text, tokens, esc); }
   var noSpot = false, stockF = '', spotF = null;
   var LOWKEY = 'shelf-finder-low-v1';
+  var AISLETYPE = 'shelf-finder-aisletype-v1', LASTSTOCK = 'shelf-finder-laststock-v1';
   function lowAt() { try { var v = parseInt(localStorage.getItem(LOWKEY), 10); return v >= 0 ? v : 2; } catch (e) { return 2; } }
   function qtyNum(it) { return /^-?\d+$/.test(String(it.qty || '').trim()) ? parseInt(it.qty, 10) : null; }
   function stockState(it) { var n = qtyNum(it); if (n === null) return ''; return n <= 0 ? 'out' : (n <= lowAt() ? 'low' : 'ok'); }
@@ -750,7 +751,7 @@
         else if (t.hasAttribute('data-lstock') || t.hasAttribute('data-lcheck')) {
           close(); openStock(t.hasAttribute('data-lcheck') ? 'check' : 'stock');
           if (lab.m && $('#stMap').querySelector('[value="' + lab.m + '"]')) $('#stMap').value = lab.m;
-          $('#stSection').value = lab.section; $('#stShelf').value = lab.shelf;
+          $('#stSection').value = lab.section; $('#stShelf').value = lab.shelf; syncStType();
         } else close();
       });
     });
@@ -769,9 +770,21 @@
     $('#stockGo').textContent = stockMode === 'check' ? 'Start checking' : 'Start scanning';
     $('#stMapField').hidden = ms.length < 2;
     $('#stMap').innerHTML = ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
+    var last = readJSON(LASTSTOCK);
+    if (last.section) {
+      if ($('#stMap').querySelector('[value="' + last.m + '"]')) $('#stMap').value = last.m;
+      $('#stSection').value = last.section; $('#stShelf').value = last.shelf || '';
+    }
+    var known = {}; items.forEach(function (i) { if (i.type) known[i.type.toLowerCase()] = i.type; });
+    $('#dl-types').innerHTML = Object.keys(known).sort().map(function (k) { return '<option value="' + esc(known[k]) + '">'; }).join('');
+    $('#stTypeField').hidden = stockMode === 'check';
+    syncStType();
     $('#stockScrim').hidden = false;
-    setTimeout(function () { $('#stSection').focus(); }, 40);
+    setTimeout(function () { (last.section ? $('#stockGo') : $('#stSection')).focus(); }, 40);
   }
+  function syncStType() { var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main'); $('#stType').value = aisleType(m, norm($('#stSection').value)); }
+  $('#stSection').addEventListener('input', syncStType);
+  $('#stMap').addEventListener('change', syncStType);
   function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + shelfLab(c.shelf) : ''); }
   $('#stockBtn').addEventListener('click', function () { openStock('stock'); });
   $('#checkBtn').addEventListener('click', function () { openStock('check'); });
@@ -804,27 +817,70 @@
     });
   }
 
+  /* Quick controls on the scanner: shelf buttons, Next shelf, Next aisle, and a remembered type per aisle. */
+  var stockCtl = null;
+  function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null') || {}; } catch (e) { return {}; } }
+  function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function aisleKey(m, section) { return (m || 'main') + '|' + String(section || '').trim().toLowerCase(); }
+  function aisleType(m, section) { return readJSON(AISLETYPE)[aisleKey(m, section)] || ''; }
+  function saveAisleType(m, section, type) { var o = readJSON(AISLETYPE), k = aisleKey(m, section); if (type) o[k] = type; else delete o[k]; writeJSON(AISLETYPE, o); }
+  function saveLastSpot(c) { writeJSON(LASTSTOCK, { m: c.m || 'main', section: c.section, shelf: c.shelf }); }
+  function quickBar(c) {
+    var SM = window.ShelfMap, info = SM && SM.zoneInfo ? SM.zoneInfo(c.section, c.m) : null, h = '', i, pr = shelfParts(c.shelf), lvl = shelfLevelOf(c.shelf);
+    if (info && info.shelves >= 2) {
+      for (i = 0; i <= info.shelves; i++) h += '<button class="chip" type="button" data-qshelf="' + i + '" aria-pressed="' + (lvl === i) + '">' + i + '</button>';
+      var cc = info.cells && lvl >= 1 ? info.cells[lvl - 1] : 1;
+      if (cc > 1) { h += '<br>'; for (i = 1; i <= cc; i++) h += '<button class="chip" type="button" data-qslot="' + i + '" aria-pressed="' + (!!pr && pr.slot === String(i)) + '">s' + i + '</button>'; }
+    }
+    var names = SM && SM.zoneNames ? SM.zoneNames(c.m) : [];
+    h += '<br>' + (info && info.shelves >= 2 ? '<button class="chip" type="button" data-qnext="1">Next shelf</button>' : '') + (names.length > 1 ? '<button class="chip" type="button" data-qaisle="1">Next aisle</button>' : '');
+    return '<div class="qbar">' + h + '</div>';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('#scanOv [data-qshelf],#scanOv [data-qslot],#scanOv [data-qnext],#scanOv [data-qaisle]');
+    if (!b || !stockCtl) return;
+    var c = stockCtl.c, SM = window.ShelfMap, info = SM.zoneInfo(c.section, c.m), lvl = shelfLevelOf(c.shelf);
+    if (b.hasAttribute('data-qshelf')) c.shelf = b.getAttribute('data-qshelf');
+    else if (b.hasAttribute('data-qslot')) c.shelf = (lvl >= 0 ? lvl : 1) + '-' + b.getAttribute('data-qslot');
+    else if (b.hasAttribute('data-qnext')) {
+      var nl = lvl < 0 ? 1 : lvl + 1;
+      if (info && nl > info.shelves) { toast('That was the last shelf. Tap Next aisle.'); return; }
+      c.shelf = String(nl);
+    } else {
+      var names = SM.zoneNames(c.m).slice().sort(cmp), at = names.map(function (n) { return n.toLowerCase(); }).indexOf(String(c.section).toLowerCase()), nx = names[(at + 1) % names.length], ni = SM.zoneInfo(nx, c.m);
+      c.section = nx; c.shelf = ni && ni.shelves >= 2 ? '1' : ''; c.type = aisleType(c.m, nx);
+    }
+    saveLastSpot(c);
+    stockCtl.refresh();
+    if (window.ShelfScan && window.ShelfScan.log) window.ShelfScan.log({ text: 'Now on ' + stockSpotLabel(c) });
+    var ti = document.getElementById('scanType'); if (ti) try { ti.focus({ preventScroll: true }); } catch (err) {}
+  });
+  function typeOnto(it, c) { if (!c.type || it.type) return it; var r = copyRaw(it); r.type = c.type; return mk(r); }
+
   $('#stockForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var section = norm($('#stSection').value), shelf = norm($('#stShelf').value);
     if (!section) { toast('Type the aisle or section first.'); return; }
     var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main');
     var check = stockMode === 'check';
-    var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m), add: !check && $('#stAdd').checked };
+    var c = { m: m, section: section, shelf: shelf, mapName: $('#stMapField').hidden ? '' : mapLabel(m), add: !check && $('#stAdd').checked, type: check ? '' : norm($('#stType').value) };
+    if (!check) saveAisleType(m, section, c.type);
+    saveLastSpot(c);
     var keepPlaced = !check && $('#stKeep').checked;
     if (!window.ShelfScan) return;
     var unknown = [], placed = 0, skipped = {}, scannedIds = {}, misplaced = [], expected = [];
     function expectedNow() { return items.filter(function (it) { return itemHere(it, c); }); }
     if (check) expected = expectedNow();
     function headHtml() {
-      return '<b>' + esc(stockSpotLabel(c)) + '</b><span>' + (check ? 'Checking: ' + Object.keys(scannedIds).length + ' scanned of ' + expected.length + ' listed' : progressText() + ' · scan each bottle') + '</span>';
+      return '<b>' + esc(stockSpotLabel(c)) + '</b><span>' + (check ? 'Checking: ' + Object.keys(scannedIds).length + ' scanned of ' + expected.length + ' listed' : progressText() + (c.type ? ' · ' + esc(c.type) : '') + ' · scan each bottle') + '</span>' + (check ? '' : quickBar(c));
     }
+    stockCtl = check ? null : { c: c, refresh: function () { window.ShelfScan.setHead(headHtml()); } };
     function stockUnknown(code, k) {
       window.ShelfScan.hold(true);
       function resume() { window.ShelfScan.hold(false); }
       function cancel(close) { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); close(); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad' }); }
       function create(info, close) {
-        var raw = { id: newId(), brand: info.name, size: info.size || '', type: info.type || '', code: code };
+        var raw = { id: newId(), brand: info.name, size: info.size || '', type: info.type || c.type || '', code: code };
         if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; } else raw.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
         var it = mk(raw);
         try { save(it); } catch (err) { toast('Could not save. This phone is out of space.'); close(); resume(); return; }
@@ -873,7 +929,7 @@
             var b = e.target.closest('[data-pick]'); if (!b) return;
             var it = items.filter(function (x) { return x.id === b.getAttribute('data-pick'); })[0]; if (!it) return;
             var snap = copyRaw(it), raw = copyRaw(it); raw.code = code;
-            var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c);
+            var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c); upd = typeOnto(upd, c);
             try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
             placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
             window.ShelfScan.log({ text: it.brand + (it.flavor ? ' ' + it.flavor : '') + ' linked and added', cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
@@ -909,16 +965,16 @@
       }
       if (itemHere(it, c)) return { text: name + ' is already here' };
       if (keepPlaced && hasSpot(it)) return { text: name + ' already has a spot (' + itemSpots(it).map(spotText).join(', ') + '), left as is' };
-      var snap = copyRaw(it), upd = placeAt(it, c);
+      var snap = copyRaw(it), upd = typeOnto(placeAt(it, c), c);
       try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return { text: 'Could not save ' + name, cls: 'bad' }; }
       placed++; window.ShelfScan.setHead(headHtml());
       return { text: name + (c.add ? ' added as another place' : ' added'), cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } };
     }, {
       continuous: true, doneText: 'Done', head: headHtml(),
       onDone: function () {
+        stockCtl = null; saveLastSpot(c);
         if (check) { showCheckReport(c, expected, scannedIds, misplaced, unknown); return; }
         toast(placed + ' bottle' + (placed === 1 ? '' : 's') + ' put on ' + stockSpotLabel(c) + (unknown.length ? '. ' + unknown.length + ' not in your list: ' + unknown.slice(0, 3).join(', ') + (unknown.length > 3 ? '...' : '') : ''));
-        $('#stShelf').value = '';
         openStock('stock');
       }
     });
