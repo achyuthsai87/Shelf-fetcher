@@ -900,7 +900,7 @@
       clearHold();
       holdTimer = setTimeout(function () {
         holdTimer = null;
-        if (drawing === dd && !dd.moved) { dd.armed = true; $('#mapCv').classList.add('grabbed'); try { if (navigator.vibrate) navigator.vibrate(20); } catch (x) {} }
+        if (drawing === dd && !dd.moved) { dd.armed = true; try { var sg = window.getSelection && window.getSelection(); if (sg && sg.removeAllRanges) sg.removeAllRanges(); } catch (x) {} $('#mapCv').classList.add('grabbed'); try { if (navigator.vibrate) navigator.vibrate(20); } catch (x) {} }
       }, 380);
     }
   }
@@ -988,6 +988,7 @@
     map = loadMap(); calcCold(map); undoReset();
     var cv = $('#mapCanvas');
     cv.addEventListener('touchmove', function (e) { if (edit && drawing && drawing.armed && e.cancelable) e.preventDefault(); }, { passive: false });
+    ['contextmenu', 'selectstart', 'dragstart', 'gesturestart'].forEach(function (t) { $('#mapWrap').addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }); });
     cv.addEventListener('pointerdown', onDown);
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);

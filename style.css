@@ -560,3 +560,6 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .tbgrp { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--glass-edge); }
 .tbgrp .chip { min-width: 40px; }
 .maptools .btn { white-space: nowrap; padding: 0 10px; font-size: 15px; }
+/* Pressing and holding on the map must not select text or open the iPhone's copy menu. */
+.mapwrap, .mapwrap * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.mapcv canvas { -webkit-user-drag: none; user-drag: none; }
