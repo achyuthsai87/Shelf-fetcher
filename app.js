@@ -766,7 +766,7 @@
         else if (t.hasAttribute('data-lstock') || t.hasAttribute('data-lcheck')) {
           close(); openStock(t.hasAttribute('data-lcheck') ? 'check' : 'stock');
           if (lab.m && $('#stMap').querySelector('[value="' + lab.m + '"]')) $('#stMap').value = lab.m;
-          $('#stSection').value = lab.section; $('#stShelf').value = lab.shelf; syncStType();
+          $('#stSection').value = lab.section; $('#stShelf').value = lab.shelf; syncStockUI();
         } else close();
       });
     });
@@ -793,13 +793,44 @@
     var known = {}; items.forEach(function (i) { if (i.type) known[i.type.toLowerCase()] = i.type; });
     $('#dl-types').innerHTML = Object.keys(known).sort().map(function (k) { return '<option value="' + esc(known[k]) + '">'; }).join('');
     $('#stTypeField').hidden = stockMode === 'check';
-    syncStType();
+    syncStockUI();
     $('#stockScrim').hidden = false;
-    setTimeout(function () { (last.section ? $('#stockGo') : $('#stSection')).focus(); }, 40);
+    setTimeout(function () { (last.section ? $('#stockGo') : ($('#stSecSel').hidden ? $('#stSection') : $('#stSecSel'))).focus(); }, 40);
   }
-  function syncStType() { var m = $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main'); $('#stType').value = aisleType(m, norm($('#stSection').value)); }
-  $('#stSection').addEventListener('input', syncStType);
-  $('#stMap').addEventListener('change', syncStType);
+  function stMapId() { return $('#stMapField').hidden ? 'main' : ($('#stMap').value || 'main'); }
+  function syncStType() { $('#stType').value = aisleType(stMapId(), norm($('#stSection').value)); }
+  /* Aisle and shelf are picked from the map's own boxes, so they follow any change to the map. */
+  function fillAisles() {
+    var SM = window.ShelfMap, names = SM && SM.zoneNames ? SM.zoneNames(stMapId()).slice().sort(cmp) : [], sel = $('#stSecSel'), cur = norm($('#stSection').value), low = cur.toLowerCase();
+    var found = names.filter(function (n) { return n.toLowerCase() === low; })[0];
+    if (cur && !found) { cur = ''; $('#stSection').value = ''; }
+    else if (found) { cur = found; $('#stSection').value = found; }
+    sel.innerHTML = '<option value="">Choose an aisle</option>' + names.map(function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
+    sel.hidden = !names.length; $('#stSection').hidden = !!names.length;
+  }
+  function drawShelfPick() {
+    var host = $('#stShelfPick'), sec = norm($('#stSection').value), info = window.ShelfMap && window.ShelfMap.zoneInfo && sec ? window.ShelfMap.zoneInfo(sec, stMapId()) : null;
+    if (!info) { host.hidden = true; host.innerHTML = ''; $('#stShelf').hidden = !!($('#stSecSel') && !$('#stSecSel').hidden); return; }
+    $('#stShelf').hidden = true;
+    if (info.shelves < 2) { host.hidden = true; host.innerHTML = ''; $('#stShelf').value = ''; return; }
+    var raw = norm($('#stShelf').value), pr = shelfParts(raw), lvl = shelfLevelOf(raw), h = '', i;
+    for (i = 0; i <= info.shelves; i++) h += '<button class="chip" type="button" data-stsh="' + i + '" aria-pressed="' + (lvl === i) + '">' + (i === 0 ? 'Top' : i) + '</button>';
+    var cc = info.cells && lvl >= 1 ? info.cells[lvl - 1] : 1;
+    if (cc > 1) { h += '</div><span class="hint">Section on shelf ' + lvl + '</span><div class="chips">'; for (i = 1; i <= cc; i++) h += '<button class="chip" type="button" data-stsl="' + i + '" aria-pressed="' + (!!pr && pr.slot === String(i)) + '">' + i + '</button>'; }
+    host.innerHTML = '<span class="hint">1 = the ' + (info.topFirst ? 'top' : 'bottom') + ' shelf</span><div class="chips">' + h + '</div>';
+    host.hidden = false;
+  }
+  function syncStockUI() { fillAisles(); syncStType(); drawShelfPick(); }
+  $('#stSection').addEventListener('input', function () { syncStType(); drawShelfPick(); });
+  $('#stSecSel').addEventListener('change', function () { $('#stSection').value = this.value; $('#stShelf').value = ''; syncStType(); drawShelfPick(); });
+  $('#stMap').addEventListener('change', function () { $('#stShelf').value = ''; syncStockUI(); });
+  $('#stShelfPick').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var lvl = shelfLevelOf($('#stShelf').value);
+    if (b.hasAttribute('data-stsh')) $('#stShelf').value = b.getAttribute('data-stsh');
+    else if (b.hasAttribute('data-stsl')) $('#stShelf').value = (lvl >= 0 ? lvl : 1) + '-' + b.getAttribute('data-stsl');
+    drawShelfPick();
+  });
   function stockSpotLabel(c) { return (c.mapName ? c.mapName + ' · ' : '') + c.section + (c.shelf !== '' ? ' · shelf ' + shelfLab(c.shelf) : ''); }
   /* Set the type (Whiskey, Vodka...) of every bottle that sits in the named boxes, so the type filter works. */
   function parseBoxNames(raw) {
@@ -1153,7 +1184,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v68';
+  var APP_VERSION = 'v69';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
