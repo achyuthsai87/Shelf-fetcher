@@ -645,7 +645,7 @@
     $('#zShelves').value = z ? (z.shelves || 5) : 5;
     zoneCells = z && z.cells ? cellsOf(z).slice() : [];
     setKind(z && z.kind ? z.kind : 'tall');
-    $('#zDelete').hidden = !z;
+    $('#zDelete').hidden = !z; $('#zAddNext').hidden = !z;
     setHs(z && z.hs ? z.hs : 1);
     $('#zSplitBox').hidden = !z;
     $('#zoneErr').hidden = true;
@@ -702,6 +702,32 @@
     notify();
     refresh();
     toast(base + ' is now ' + parts[0].name + ' to ' + parts[parts.length - 1].name + '. Bottles that said ' + base + ' need the new names.');
+  }
+  /* Next box name: A3 gives A4 (one more than the highest A number already on the map). */
+  function nextBoxName(name) {
+    var m = /^(.*?)(\d+)$/.exec(String(name || '').trim());
+    if (!m) return name ? String(name).trim() + '2' : '';
+    var pre = m[1].toLowerCase(), hi = parseInt(m[2], 10);
+    map.zones.forEach(function (z) { var q = /^(.*?)(\d+)$/.exec(String(z.name || '').trim()); if (q && q[1].toLowerCase() === pre) hi = Math.max(hi, parseInt(q[2], 10)); });
+    return m[1] + (hi + 1);
+  }
+  /* A free spot of the same size right next to a box (right, below, left, above), or on top of it if the map is full there. */
+  function roomNextTo(z) {
+    var g = 0.004, c = [{ x: z.x + z.w + g, y: z.y }, { x: z.x, y: z.y + z.h + g }, { x: z.x - z.w - g, y: z.y }, { x: z.x, y: z.y - z.h - g }], i;
+    for (i = 0; i < c.length; i++) {
+      var t = { x: c[i].x, y: c[i].y, w: z.w, h: z.h };
+      if (t.x >= 0 && t.y >= 0 && t.x + t.w <= 1 && t.y + t.h <= 1 && !overlapsAny(t, map.zones)) return t;
+    }
+    return { x: Math.min(Math.max(0, z.x + z.w * 0.3), 1 - z.w), y: Math.min(Math.max(0, z.y + z.h * 0.3), 1 - z.h), w: z.w, h: z.h };
+  }
+  function addNextTo(z) {
+    if (!z) return;
+    var r = roomNextTo(z), nz = { id: newId(), name: nextBoxName(z.name), x: r.x, y: r.y, w: r.w, h: r.h, shelves: z.shelves || 5, kind: z.kind || 'tall' };
+    if (z.hs) nz.hs = z.hs; if (z.cells) nz.cells = z.cells.slice();
+    map.zones.push(nz);
+    if (!persist()) toast('This phone has no room left to keep the map.');
+    closeZone(); notify(); refresh();
+    toast(nz.name + ' added next to ' + z.name + '. Press and hold it to move or resize.');
   }
   function setKind(k) {
     zoneKind = k;
@@ -1027,6 +1053,13 @@
     $('#zoneForm').addEventListener('submit', function (e) { e.preventDefault(); saveZone(); });
     $('#zCancel').addEventListener('click', closeZone);
     $('#zDelete').addEventListener('click', deleteZone);
+    $('#zAddNext').addEventListener('click', function () { var z = zoneEditing && map.zones.filter(function (q) { return q.id === zoneEditing; })[0]; addNextTo(z); });
+    $('#mapAddBox').addEventListener('click', function () {
+      if (!map) return;
+      var ref = map.zones[map.zones.length - 1], rect, nm = '';
+      if (ref) { rect = roomNextTo(ref); nm = nextBoxName(ref.name); } else rect = { x: 0.45, y: 0.45, w: 0.1, h: 0.1 };
+      pendingName = nm; openZone(null, rect);
+    });
     var bulkKind = 'cooler';
     $('#bulkKind').addEventListener('click', function (e) {
       var b = e.target.closest('[data-bk]'); if (!b) return;
@@ -1076,6 +1109,7 @@
       var m = this.mapOf(id || 'main'), z = m && m.zones ? findZone(m.zones, name) : null;
       return z ? { shelves: (z.kind === 'flat' || z.kind === 'low') ? 1 : (z.shelves || 5), topFirst: m.topFirst !== false, kind: z.kind || 'tall', cells: z.cells ? cellsOf(z) : null } : null;
     },
+    editZone: function (name, id) { var mm = this.mapOf(id || 'main'), z = mm && mm.zones ? findZone(mm.zones, name) : null; if (z && (id || 'main') === cur) openZone(z); return !!z; },
     onShow: function () { refresh(); },
     show: function (it, id, pi) {
       if (root.ShelfApp) root.ShelfApp.showTab('map');
