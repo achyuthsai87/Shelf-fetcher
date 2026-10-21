@@ -332,6 +332,12 @@
   function renderRecent() {
     var host = $('#recentHost'); if (!host) return;
     var r = recentList().map(function (e) { return { e: e, it: items.find(function (x) { return x.id === e.id; }) }; }).filter(function (r) { return r.it && (r.e.added || r.e.code || r.e.at); })[0];
+    if (!r) {
+      /* Nothing logged yet (bottles placed before this card existed): use the most recently changed bottle that has a spot. */
+      var best = null;
+      items.forEach(function (x) { if (itemSpots(x).length && x.updatedAt && (!best || x.updatedAt > best.updatedAt)) best = x; });
+      if (best) r = { e: { id: best.id, t: best.updatedAt, at: null }, it: best };
+    }
     if (!r) { host.innerHTML = ''; return; }
     var e = r.e, it = r.it, what = [], at = e.at;
     if (!at) { var sp = itemSpots(it)[0]; if (sp) at = { m: sp.m, section: sp.section, shelf: sp.shelf }; }
@@ -1266,7 +1272,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v79';
+  var APP_VERSION = 'v80';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
