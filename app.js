@@ -697,7 +697,7 @@
       if (mo) mo.disconnect();
       ov.remove();
       var s = document.getElementById('scanOv');
-      if (s && !document.querySelector('.popov')) { s.removeAttribute('inert'); var ti = document.getElementById('scanType'); if (ti) try { ti.focus({ preventScroll: true }); } catch (e) {} }
+      if (s && !document.querySelector('.popov')) { s.removeAttribute('inert'); var ti = document.getElementById('scanType'); if (ti) try { ti.setAttribute('inputmode', 'none'); ti.focus({ preventScroll: true }); } catch (e) {} }
     });
   }
   /* Spots a bottle has: its own Aisle and Shelf on the main map, plus every extra place. */
@@ -1184,7 +1184,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v69';
+  var APP_VERSION = 'v70';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

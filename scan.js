@@ -84,8 +84,8 @@
     tin.addEventListener('pointerdown', function () { if (tin.getAttribute('inputmode') === 'none') { tin.setAttribute('inputmode', 'numeric'); tin.blur(); setTimeout(function () { tin.focus(); }, 30); } });
     if (opts.continuous) setTimeout(function () { try { if (state && !state.dead) tin.focus({ preventScroll: true }); } catch (e) {} }, 60);
     $('#scanClose').addEventListener('click', function () { var d = opts.onDone; stop(); if (d) d(); });
-    $('#scanTypeGo').addEventListener('click', function () { var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; });
-    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; } });
+    $('#scanTypeGo').addEventListener('click', function () { var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; if (state && state.typingDone) state.typingDone(); });
+    $('#scanType').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var tv = $('#scanType'); found(tv.value); tv = $('#scanType'); if (tv) tv.value = ''; if (state && state.typingDone) state.typingDone(); } });
     $('#scanPhoto').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0]; e.target.value = '';
       if (!f) return;
@@ -96,47 +96,72 @@
         return r.decodeFromImageUrl(url).then(function (res) { URL.revokeObjectURL(url); found(res.getText()); }, function () { URL.revokeObjectURL(url); if (state) msg.textContent = 'No barcode found in that photo. Try again, closer and in focus.'; });
       }, function () { URL.revokeObjectURL(url); if (state) msg.textContent = 'Could not load the scanner.'; });
     });
-    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { msg.textContent = 'This phone will not open the camera here. Use a photo or type the number.'; return; }
     var video = $('#scanVideo');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false }).then(function (stream) {
-      if (!state || state.dead) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
-      state.stream = stream;
-      video.srcObject = stream;
-      var p = video.play(); if (p && p.catch) p.catch(function () {});
-      msg.textContent = 'Point the camera at the barcode.';
-      if (root.BarcodeDetector) {
-        var det;
-        try { det = new root.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'] }); } catch (e) { det = null; }
-        if (det) {
-          state.timer = setInterval(function () {
-            if (!state || state.done || video.readyState < 2) return;
-            det.detect(video).then(function (r) { if (r && r[0]) found(r[0].rawValue); }, function () {});
-          }, 250);
-          return;
+    /* The camera only runs while it is needed: it is switched off while a pop-up is open or while you type, and back on afterwards (saves battery). */
+    function startCam() {
+      if (!state || state.dead) return;
+      var gen = state.gen = (state.gen || 0) + 1;
+      state.paused = false;
+      if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { msg.textContent = 'This phone will not open the camera here. Use a photo or type the number.'; return; }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false }).then(function (stream) {
+        if (!state || state.dead || state.gen !== gen) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        state.stream = stream;
+        video.srcObject = stream;
+        var p = video.play(); if (p && p.catch) p.catch(function () {});
+        msg.textContent = 'Point the camera at the barcode.';
+        if (root.BarcodeDetector) {
+          var det;
+          try { det = new root.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'] }); } catch (e) { det = null; }
+          if (det) {
+            state.timer = setInterval(function () {
+              if (!state || state.done || video.readyState < 2) return;
+              det.detect(video).then(function (r) { if (r && r[0]) found(r[0].rawValue); }, function () {});
+            }, 250);
+            return;
+          }
         }
-      }
-      loadLib().then(function (Z) {
-        if (!state || state.dead) return;
-        var hints = new Map();
-        hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE]);
-        hints.set(Z.DecodeHintType.TRY_HARDER, true);
-        var rd = new Z.MultiFormatReader(); rd.setHints(hints);
-        var cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
-        state.timer = setInterval(function () {
-          if (!state || state.done || video.readyState < 2 || !video.videoWidth) return;
-          var k = Math.min(1, 960 / video.videoWidth);
-          cv.width = Math.round(video.videoWidth * k); cv.height = Math.round(video.videoHeight * k);
-          cx.drawImage(video, 0, 0, cv.width, cv.height);
-          try {
-            var bm = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)));
-            found(rd.decode(bm).getText());
-          } catch (e) { /* no barcode in this frame */ }
-        }, 220);
-      }, function () { if (state) msg.textContent = 'Could not load the scanner. Use a photo or type the number.'; });
-    }, function () {
-      if (state) msg.textContent = 'The camera is blocked. Allow camera access for this app in the phone settings, or use a photo or type the number.';
-    });
+        loadLib().then(function (Z) {
+          if (!state || state.dead || state.gen !== gen) return;
+          var hints = new Map();
+          hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE]);
+          hints.set(Z.DecodeHintType.TRY_HARDER, true);
+          var rd = new Z.MultiFormatReader(); rd.setHints(hints);
+          var cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
+          state.timer = setInterval(function () {
+            if (!state || state.done || video.readyState < 2 || !video.videoWidth) return;
+            var k = Math.min(1, 960 / video.videoWidth);
+            cv.width = Math.round(video.videoWidth * k); cv.height = Math.round(video.videoHeight * k);
+            cx.drawImage(video, 0, 0, cv.width, cv.height);
+            try {
+              var bm = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)));
+              found(rd.decode(bm).getText());
+            } catch (e) { /* no barcode in this frame */ }
+          }, 220);
+        }, function () { if (state) msg.textContent = 'Could not load the scanner. Use a photo or type the number.'; });
+      }, function () {
+        if (state) msg.textContent = 'The camera is blocked. Allow camera access for this app in the phone settings, or use a photo or type the number.';
+      });
+    }
+    function pauseCam() {
+      if (!state || state.dead || state.paused) return;
+      state.paused = true; state.gen = (state.gen || 0) + 1;
+      try { clearInterval(state.timer); } catch (e) {}
+      try { if (state.stream) state.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      state.stream = null; try { video.srcObject = null; } catch (e) {}
+      msg.textContent = 'Camera is off while you type. It comes back on its own.';
+    }
+    function resumeCam() { if (state && !state.dead && state.paused && !state.hold) startCam(); }
+    state.pauseCam = pauseCam; state.resumeCam = resumeCam;
+    tin.addEventListener('focus', function () { if (tin.getAttribute('inputmode') !== 'none') pauseCam(); });
+    tin.addEventListener('blur', function () { setTimeout(function () { if (state && document.activeElement !== tin) resumeCam(); }, 350); });
+    function typingDone() {
+      if (!state || state.hold) return;
+      tin.setAttribute('inputmode', 'none'); tin.blur();
+      setTimeout(function () { if (state && !state.dead) { try { tin.focus({ preventScroll: true }); } catch (e) {} resumeCam(); } }, 40);
+    }
+    state.typingDone = typingDone;
+    startCam();
   }
 
-  root.ShelfScan = { open: open, close: stop, hold: function (b) { if (state) state.hold = !!b; }, setHead: function (html) { var e = document.querySelector('#scanOv .scanhead'); if (e) e.innerHTML = html; }, log: function (r) { if (state && state.addLog) state.addLog(r); } };
+  root.ShelfScan = { open: open, close: stop, hold: function (b) { if (!state) return; state.hold = !!b; if (b) { if (state.pauseCam) state.pauseCam(); } else { var ti = document.getElementById('scanType'); if (ti) ti.setAttribute('inputmode', 'none'); if (state.resumeCam) state.resumeCam(); } }, setHead: function (html) { var e = document.querySelector('#scanOv .scanhead'); if (e) e.innerHTML = html; }, log: function (r) { if (state && state.addLog) state.addLog(r); } };
 })(typeof window !== 'undefined' ? window : globalThis);
