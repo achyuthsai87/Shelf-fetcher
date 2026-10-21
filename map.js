@@ -800,6 +800,8 @@
     var name = $('#zName').value.trim(), sh = Math.round(parseFloat($('#zShelves').value));
     if (!name) { $('#zoneErr').textContent = 'Enter the aisle or section name, for example Aisle 3.'; $('#zoneErr').hidden = false; return; }
     if (!(sh >= 1 && sh <= 12)) sh = 5;
+    var dup = map.zones.filter(function (q) { return q.id !== zoneEditing && String(q.name).trim().toLowerCase() === name.toLowerCase(); })[0];
+    if (dup) { $('#zoneErr').textContent = 'There is already a box called ' + dup.name + '. Pick a different name so bottles go to the right one.'; $('#zoneErr').hidden = false; return; }
     if (zoneEditing) {
       var z = map.zones.filter(function (q) { return q.id === zoneEditing; })[0];
       if (z) { z.name = name; z.shelves = sh; z.kind = zoneKind; if (zoneHs === 1) delete z.hs; else z.hs = zoneHs; applyCells(z, sh); }
@@ -813,15 +815,18 @@
     if (!persist()) toast('This phone has no room left to keep the map.');
     closeZone();
     notify();
-    if (sel && sel.item) selectItem(sel.item); else refresh();
+    if (!edit && sel && sel.item) selectItem(sel.item); else refresh();
   }
   function deleteZone() {
     if (!zoneEditing) return;
+    var dz = map.zones.filter(function (q) { return q.id === zoneEditing; })[0], held2 = 0;
+    if (dz) items().forEach(function (it) { if (String(spot(it, cur).section).trim().toLowerCase() === String(dz.name).trim().toLowerCase()) held2++; });
     map.zones = map.zones.filter(function (q) { return q.id !== zoneEditing; });
     persist();
     closeZone();
     notify();
-    if (sel && sel.item) selectItem(sel.item); else refresh();
+    if (!edit && sel && sel.item) selectItem(sel.item); else refresh();
+    toast(held2 ? 'Deleted. ' + held2 + ' bottle' + (held2 === 1 ? '' : 's') + ' had that spot. Undo brings it back.' : 'Deleted.');
   }
 
   /* Pointer handling on the canvas */
