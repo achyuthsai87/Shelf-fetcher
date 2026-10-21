@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=74">
+<link rel="stylesheet" href="style.css?v=75">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -72,6 +72,8 @@
       <div class="glass card mapcaption" id="mapCaption" hidden></div>
       <div class="maptools">
         <button class="btn ghost" id="mapEditBtn" type="button">Edit sections</button>
+        <button class="btn ghost" id="mapUndoBtn" type="button" hidden>Undo</button>
+        <button class="btn ghost" id="mapRedoBtn" type="button" hidden>Redo</button>
         <button class="btn ghost" id="mapResetBtn" type="button">Reset view</button>
       </div>
       <label class="tiltrow" for="mapTilt"><span>Tilt</span><input id="mapTilt" type="range" min="25" max="90" value="54"></label>
@@ -87,6 +89,7 @@
         <div class="field full"><input id="bulkNames" placeholder="1-17, FD" autocomplete="off" autocapitalize="characters"></div>
         <div class="field full"><div class="seg" id="bulkKind"><button type="button" data-bk="tall" aria-pressed="false">Shelves</button><button type="button" data-bk="cooler" aria-pressed="true">Cooler</button><button type="button" data-bk="freezer" aria-pressed="false">Freezer</button><button type="button" data-bk="low" aria-pressed="false">Counter</button></div></div>
         <button class="btn block" id="bulkApply" type="button">Apply to these boxes</button>
+        <button class="btn block ghost danger" id="bulkDelete" type="button">Delete these boxes</button>
       </div>
       <div class="glass card">
         <h2>Map settings</h2>
@@ -290,11 +293,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=74"></script>
-<script src="app.js?v=74"></script>
-<script src="photo.js?v=74"></script>
-<script src="scan.js?v=74"></script>
-<script src="map.js?v=74"></script>
-<script src="backup.js?v=74"></script>
+<script src="search.js?v=75"></script>
+<script src="app.js?v=75"></script>
+<script src="photo.js?v=75"></script>
+<script src="scan.js?v=75"></script>
+<script src="map.js?v=75"></script>
+<script src="backup.js?v=75"></script>
 </body>
 </html>

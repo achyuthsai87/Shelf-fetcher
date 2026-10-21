@@ -402,7 +402,30 @@
   function saveExtras() { try { localStorage.setItem(KEY2, JSON.stringify(extras)); return true; } catch (e) { return false; } }
   var coldSet = [];
   function calcCold(m) { coldSet = m && m.zones ? m.zones.filter(function (z) { return z.kind === 'cooler' || z.kind === 'freezer'; }).map(function (z) { return String(z.name).trim().toLowerCase(); }) : []; }
+  /* Undo history for the boxes on the map: each save keeps the layout it replaced. */
+  var undoStack = [], redoStack = [], lastZ = null;
+  function zSnap() { return map && map.zones ? JSON.stringify(map.zones) : null; }
+  function undoUI() {
+    var u = $('#mapUndoBtn'), r = $('#mapRedoBtn'); if (!u || !r) return;
+    u.hidden = r.hidden = !edit; u.disabled = !undoStack.length; r.disabled = !redoStack.length;
+  }
+  function undoReset() { undoStack = []; redoStack = []; lastZ = zSnap(); undoUI(); }
+  function applyZones(json, from, to) {
+    var cur2 = zSnap(); if (cur2 !== null) to.push(cur2);
+    map.zones = JSON.parse(json); lastZ = json; sel = null;
+    skipUndo = true; var ok = persist(); skipUndo = false;
+    if (!ok) toast('This phone has no room left to keep the map.');
+    closeZone(); notify(); refresh(); undoUI();
+  }
+  var skipUndo = false;
+  function undoMap() { if (!undoStack.length) return; applyZones(undoStack.pop(), undoStack, redoStack); toast('Undone.'); }
+  function redoMap() { if (!redoStack.length) return; applyZones(redoStack.pop(), redoStack, undoStack); toast('Redone.'); }
   function persist() {
+    if (!skipUndo && map) {
+      var nowZ = zSnap();
+      if (lastZ !== null && nowZ !== lastZ) { undoStack.push(lastZ); if (undoStack.length > 50) undoStack.shift(); redoStack = []; }
+      lastZ = nowZ; undoUI();
+    }
     try {
       if (cur === 'main') { localStorage.setItem(KEY, JSON.stringify(map)); calcCold(map); }
       else {
@@ -566,6 +589,8 @@
     $('#tab-map h1').textContent = extras.length ? 'Maps' : 'Store map';
   }
   function refresh() {
+    if (lastZ === null) lastZ = zSnap();
+    undoUI();
     var has = !!(map && imgEl), isMain = cur === 'main';
     renderTabs();
     $('#mapEmpty').hidden = has;
@@ -612,6 +637,7 @@
     if (edit) { edit = false; restoreView(); }
     cur = id; sel = null; pendingName = ''; zoom = 1; panX = 0; panY = 0; yaw = 0;
     map = id === 'main' ? loadMap() : extras.filter(function (m) { return m.id === id; })[0] || null;
+    undoReset();
     loadImage(function () { refresh(); if (then) then(); });
   }
   var held = null;
@@ -717,9 +743,11 @@
   function roomNextTo(z) {
     var g = 0.004, below = { x: z.x, y: z.y + z.h + g }, above = { x: z.x, y: z.y - z.h - g }, right = { x: z.x + z.w + g, y: z.y }, left = { x: z.x - z.w - g, y: z.y }, i;
     var nm = /^([A-Za-z]+)\d+[a-z]*$/.exec(String(z.name || '').trim()), sib = nm ? map.zones.filter(function (q) { return new RegExp('^' + nm[1] + '\\d+[a-z]*$', 'i').test(String(q.name || '').trim()); }) : [], c, strict = false;
-    if (sib.length >= 2) {
-      var xs = sib.map(function (q) { return q.x + q.w / 2; }), ys = sib.map(function (q) { return q.y + q.h / 2; });
-      var vert = (Math.max.apply(null, ys) - Math.min.apply(null, ys)) >= (Math.max.apply(null, xs) - Math.min.apply(null, xs));
+    sib = sib.filter(function (q) { return q !== z; });
+    if (sib.length >= 1) {
+      /* Follow the way the nearest neighbour with the same letter lies: beside it means a row, above or below it means a column. */
+      var zcx = z.x + z.w / 2, zcy = z.y + z.h / 2, near = sib.slice().sort(function (a, b) { return Math.hypot(a.x + a.w / 2 - zcx, a.y + a.h / 2 - zcy) - Math.hypot(b.x + b.w / 2 - zcx, b.y + b.h / 2 - zcy); })[0];
+      var vert = Math.abs(near.y + near.h / 2 - zcy) >= Math.abs(near.x + near.w / 2 - zcx);
       c = vert ? [below, above] : [right, left]; strict = true;
     } else c = [right, below, left, above];
     for (i = 0; i < c.length; i++) {
@@ -957,7 +985,7 @@
 
   function init() {
     extras = loadExtras(); cur = 'main';
-    map = loadMap(); calcCold(map);
+    map = loadMap(); calcCold(map); undoReset();
     var cv = $('#mapCanvas');
     cv.addEventListener('touchmove', function (e) { if (edit && drawing && drawing.armed && e.cancelable) e.preventDefault(); }, { passive: false });
     cv.addEventListener('pointerdown', onDown);
@@ -983,7 +1011,14 @@
       if (edit) { savedView = { yaw: yaw, elev: elev }; sel = sel; } else restoreView();
       refresh();
     });
-    $('#mapResetBtn').addEventListener('click', function () { zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI); schedule(); });
+    $('#mapUndoBtn').addEventListener('click', undoMap);
+    $('#mapRedoBtn').addEventListener('click', redoMap);
+    $('#mapResetBtn').addEventListener('click', function () {
+      /* Clear any half-finished touch too, so nothing drags the view back. */
+      clearHold(); pointers = {}; pinch = null; drawing = null; fast = false; focusDot = false;
+      zoom = 1; panX = 0; panY = 0; yaw = 0; elev = 0.95; $('#mapTilt').value = Math.round(elev * 180 / Math.PI);
+      $('#mapCv').classList.remove('grabbed'); paint(); schedule();
+    });
     $('#mapTilt').addEventListener('input', function (e) { elev = parseFloat(e.target.value) * Math.PI / 180; fast = true; schedule(); clearTimeout(init.t); init.t = setTimeout(function () { fast = false; schedule(); }, 180); });
     $('#segClean').addEventListener('click', function () { map.look = 'clean'; persist(); refresh(); });
     $('#segPhoto').addEventListener('click', function () { map.look = 'photo'; persist(); refresh(); });
@@ -1112,6 +1147,25 @@
       notify(); refresh();
       var label = { tall: 'Shelves', cooler: 'Cooler', freezer: 'Freezer', low: 'Counter' }[bulkKind];
       toast(hit.length + ' box' + (hit.length === 1 ? '' : 'es') + ' set to ' + label + (miss.length ? '. Not found: ' + miss.slice(0, 4).join(', ') + (miss.length > 4 ? '...' : '') : ''));
+    });
+    $('#bulkDelete').addEventListener('click', function () {
+      var raw = $('#bulkNames').value, names = [];
+      raw.split(/[,;\n&+]+|\s+and\s+/i).forEach(function (t) {
+        t = t.trim(); if (!t) return;
+        var mm = /^([A-Za-z]*)\s*(\d+)\s*[-–]\s*(?:[A-Za-z]*)\s*(\d+)$/.exec(t);
+        if (mm && parseInt(mm[3], 10) >= parseInt(mm[2], 10) && parseInt(mm[3], 10) - parseInt(mm[2], 10) < 200) { for (var n = parseInt(mm[2], 10); n <= parseInt(mm[3], 10); n++) names.push(mm[1] + n); }
+        else names.push(t);
+      });
+      if (!names.length) { toast('Type the box names first, like A4-A6.'); return; }
+      var set = {}; names.forEach(function (n) { set[n.toLowerCase()] = 1; });
+      var hit = map.zones.filter(function (z) { return set[String(z.name).trim().toLowerCase()]; });
+      if (!hit.length) { toast('No box with those names. Check the spelling.'); return; }
+      var ok = true; try { ok = window.confirm('Delete ' + hit.length + ' box' + (hit.length === 1 ? '' : 'es') + ' (' + hit.slice(0, 5).map(function (z) { return z.name; }).join(', ') + (hit.length > 5 ? '...' : '') + ')? Bottles stay in your list. You can Undo.'); } catch (e) {}
+      if (!ok) return;
+      map.zones = map.zones.filter(function (z) { return hit.indexOf(z) < 0; });
+      if (!persist()) toast('This phone has no room left to keep the map.');
+      notify(); refresh();
+      toast(hit.length + ' box' + (hit.length === 1 ? '' : 'es') + ' deleted. Tap Undo to bring back.');
     });
     $('#zShelves').addEventListener('input', renderCells);
     $('#zHeight').addEventListener('click', function (e) { var b = e.target.closest('[data-hs]'); if (b) setHs(parseFloat(b.getAttribute('data-hs'))); });

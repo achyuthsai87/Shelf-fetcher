@@ -559,3 +559,4 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .tbboxes { max-height: 36vh; overflow: auto; display: grid; gap: 8px; }
 .tbgrp { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--glass-edge); }
 .tbgrp .chip { min-width: 40px; }
+.maptools .btn { white-space: nowrap; padding: 0 10px; font-size: 15px; }
