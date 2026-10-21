@@ -556,3 +556,6 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .qbar .chip { min-width: 38px; padding: 8px 12px; }
 .popov.top .popcard { margin: 0 auto; }
 #tab-browse > .btn { margin-bottom: 10px; }
+.tbboxes { max-height: 36vh; overflow: auto; display: grid; gap: 8px; }
+.tbgrp { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--glass-edge); }
+.tbgrp .chip { min-width: 40px; }

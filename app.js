@@ -802,15 +802,14 @@
   /* Aisle and shelf are picked from the map's own boxes, so they follow any change to the map. */
   function fillAisles() {
     var SM = window.ShelfMap, names = SM && SM.zoneNames ? SM.zoneNames(stMapId()).slice().sort(cmp) : [], sel = $('#stSecSel'), cur = norm($('#stSection').value), low = cur.toLowerCase();
-    var found = names.filter(function (n) { return n.toLowerCase() === low; })[0];
-    if (cur && !found) { cur = ''; $('#stSection').value = ''; }
-    else if (found) { cur = found; $('#stSection').value = found; }
-    sel.innerHTML = '<option value="">Choose an aisle</option>' + names.map(function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
-    sel.hidden = !names.length; $('#stSection').hidden = !!names.length;
+    var found = names.filter(function (n) { return n.toLowerCase() === low; })[0], custom = !!cur && !found;
+    if (found) { cur = found; $('#stSection').value = found; }
+    sel.innerHTML = '<option value="">Choose an aisle</option>' + names.map(function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '<option value="__new__"' + (custom ? ' selected' : '') + '>Other... (type a name)</option>';
+    sel.hidden = !names.length; $('#stSection').hidden = !!names.length && !custom;
   }
   function drawShelfPick() {
     var host = $('#stShelfPick'), sec = norm($('#stSection').value), info = window.ShelfMap && window.ShelfMap.zoneInfo && sec ? window.ShelfMap.zoneInfo(sec, stMapId()) : null;
-    if (!info) { host.hidden = true; host.innerHTML = ''; $('#stShelf').hidden = !!($('#stSecSel') && !$('#stSecSel').hidden); return; }
+    if (!info) { host.hidden = true; host.innerHTML = ''; $('#stShelf').hidden = !sec && !$('#stSecSel').hidden && $('#stSecSel').value !== '__new__'; return; }
     $('#stShelf').hidden = true;
     if (info.shelves < 2) { host.hidden = true; host.innerHTML = ''; $('#stShelf').value = ''; return; }
     var raw = norm($('#stShelf').value), pr = shelfParts(raw), lvl = shelfLevelOf(raw), h = '', i;
@@ -822,7 +821,12 @@
   }
   function syncStockUI() { fillAisles(); syncStType(); drawShelfPick(); }
   $('#stSection').addEventListener('input', function () { syncStType(); drawShelfPick(); });
-  $('#stSecSel').addEventListener('change', function () { $('#stSection').value = this.value; $('#stShelf').value = ''; syncStType(); drawShelfPick(); });
+  $('#stSecSel').addEventListener('change', function () {
+    var other = this.value === '__new__';
+    $('#stSection').value = other ? '' : this.value; $('#stShelf').value = '';
+    $('#stSection').hidden = !other; if (other) $('#stSection').focus();
+    syncStType(); drawShelfPick();
+  });
   $('#stMap').addEventListener('change', function () { $('#stShelf').value = ''; syncStockUI(); });
   $('#stShelfPick').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -848,27 +852,50 @@
     var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
     var known = {}; items.forEach(function (i) { if (i.type) known[i.type.toLowerCase()] = i.type; });
     var opts = Object.keys(known).sort().map(function (k) { return '<option value="' + esc(known[k]) + '"></option>'; }).join('');
-    popup('<h3>Set bottle type by aisle</h3><p>Every bottle listed in these boxes gets the type you choose. Example: A1, A2, A3 or 1-9.</p>' +
+    popup('<h3>Set bottle type by aisle</h3><p>Tap the boxes, or a whole letter like All A. Every bottle listed in them gets the type.</p>' +
       (ms.length > 1 ? '<label class="hint" for="tbMap">Map</label><select id="tbMap">' + ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('') + '</select>' : '') +
-      '<input id="tbNames" placeholder="Boxes: A1, A2, A3" autocomplete="off" autocapitalize="characters">' +
+      '<div id="tbBoxes" class="tbboxes"></div>' +
       '<input id="tbType" list="tbTypes" placeholder="Type: Whiskey" autocomplete="off"><datalist id="tbTypes">' + opts + '</datalist>' +
       '<label class="chk"><input type="checkbox" id="tbBlank" checked> Only bottles with no type yet</label>' +
       '<p class="hint" id="tbInfo"></p>' +
       '<div class="popbtns"><button class="btn grow" data-tbgo type="button">Set type</button><button class="btn ghost grow" data-tbclose type="button">Cancel</button></div>', function (ov, close) {
-      function pick() {
-        var names = parseBoxNames(ov.querySelector('#tbNames').value), map = ov.querySelector('#tbMap') ? ov.querySelector('#tbMap').value : 'main';
-        var only = ov.querySelector('#tbBlank').checked, set = {}; names.forEach(function (n) { set[n] = 1; });
-        var hit = names.length ? items.filter(function (it) {
-          if (only && it.type) return false;
-          return itemSpots(it).some(function (s) { return s.m === map && set[String(s.section || '').trim().toLowerCase()]; });
-        }) : [];
-        return hit;
+      var sel = {};
+      function mapId() { return ov.querySelector('#tbMap') ? ov.querySelector('#tbMap').value : 'main'; }
+      function boxNames() {
+        var m = mapId(), seen = {}, out = [];
+        (window.ShelfMap && window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(m) : []).forEach(function (n) { var k = n.toLowerCase(); if (!seen[k]) { seen[k] = 1; out.push(n); } });
+        items.forEach(function (it) { itemSpots(it).forEach(function (sp) { var n = String(sp.section || '').trim(), k = n.toLowerCase(); if (sp.m === m && n && !seen[k]) { seen[k] = 1; out.push(n); } }); });
+        return out.sort(cmp);
       }
-      function info() { var n = pick().length; ov.querySelector('#tbInfo').textContent = n + ' bottle' + (n === 1 ? '' : 's') + ' would change.'; }
-      ov.addEventListener('input', info); ov.addEventListener('change', info); info();
+      function groupOf(n) { var g = /^[A-Za-z]+/.exec(n); return g ? g[0].toUpperCase() : '#'; }
+      function draw() {
+        var names = boxNames(), groups = {}, order = [];
+        names.forEach(function (n) { var g = groupOf(n); if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(n); });
+        ov.querySelector('#tbBoxes').innerHTML = order.map(function (g) {
+          var all = groups[g].every(function (n) { return sel[n.toLowerCase()]; });
+          return '<div class="tbgrp"><button class="chip" type="button" data-tbgrp="' + esc(g) + '" aria-pressed="' + all + '">' + (g === '#' ? 'All numbered' : 'All ' + esc(g)) + '</button>' +
+            groups[g].map(function (n) { return '<button class="chip" type="button" data-tbbox="' + esc(n) + '" aria-pressed="' + !!sel[n.toLowerCase()] + '">' + esc(n) + '</button>'; }).join('') + '</div>';
+        }).join('') || '<p class="hint">No boxes on this map yet.</p>';
+        info();
+      }
+      function pick() {
+        var m = mapId(), only = ov.querySelector('#tbBlank').checked;
+        return items.filter(function (it) {
+          if (only && it.type) return false;
+          return itemSpots(it).some(function (sp) { return sp.m === m && sel[String(sp.section || '').trim().toLowerCase()]; });
+        });
+      }
+      function info() { var n = pick().length, c = Object.keys(sel).filter(function (k) { return sel[k]; }).length; ov.querySelector('#tbInfo').textContent = c + ' box' + (c === 1 ? '' : 'es') + ' picked. ' + n + ' bottle' + (n === 1 ? '' : 's') + ' would change.'; }
+      ov.addEventListener('change', function (e) { if (e.target.id === 'tbMap') { sel = {}; draw(); } else info(); });
+      ov.addEventListener('input', info);
       ov.addEventListener('click', function (e) {
         var t = e.target.closest('button'); if (!t) return;
         if (t.hasAttribute('data-tbclose')) { close(); return; }
+        if (t.hasAttribute('data-tbbox')) { var k = t.getAttribute('data-tbbox').toLowerCase(); sel[k] = !sel[k]; draw(); return; }
+        if (t.hasAttribute('data-tbgrp')) {
+          var g = t.getAttribute('data-tbgrp'), mine = boxNames().filter(function (n) { return groupOf(n) === g; }), all = mine.every(function (n) { return sel[n.toLowerCase()]; });
+          mine.forEach(function (n) { sel[n.toLowerCase()] = !all; }); draw(); return;
+        }
         if (!t.hasAttribute('data-tbgo')) return;
         var type = ov.querySelector('#tbType').value.trim(), hit = pick();
         if (!type) { toast('Type the bottle type first, like Whiskey.'); return; }
@@ -880,6 +907,7 @@
         if (!saveLocal()) { items = prev; toast('This phone has no room left to save.'); return; }
         close(); renderAll(); toast(hit.length + ' bottle' + (hit.length === 1 ? '' : 's') + ' set to ' + type + '.');
       });
+      draw();
     });
   }
   $('#typeBtn').addEventListener('click', openTypeByAisle);
@@ -1184,7 +1212,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v70';
+  var APP_VERSION = 'v71';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
