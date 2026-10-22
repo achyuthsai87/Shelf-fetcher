@@ -182,13 +182,30 @@
     var ms = window.ShelfMap && window.ShelfMap.maps ? window.ShelfMap.maps() : [];
     var pm = p.m || (ms.filter(function (m) { return m.id !== 'main'; })[0] || { id: 'main' }).id;
     var names = window.ShelfMap && window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(pm) : [];
+    var shInfo = p.section && window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(p.section, pm) : null;
+    var sorted = names.slice().sort(cmp), foundN = sorted.filter(function (n) { return n.toLowerCase() === String(p.section || '').trim().toLowerCase(); })[0], customN = !!String(p.section || '').trim() && !foundN;
     return '<div class="placerow">' +
       '<select data-pmap aria-label="Map">' + ms.map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === pm ? ' selected' : '') + '>' + esc(m.name) + '</option>'; }).join('') + '</select>' +
       '<button class="tbtn" type="button" data-prm aria-label="Remove this place">Remove</button>' +
-      '<input data-ps list="dl-pm-' + esc(pm) + '" placeholder="Section" value="' + esc(p.section || '') + '" autocapitalize="characters">' +
-      '<datalist id="dl-pm-' + esc(pm) + '">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
-      '<input data-pf placeholder="Shelf (0 = on top, 3-2 = shelf 3 section 2)" value="' + esc(p.shelf || '') + '">' +
+      '<select data-pssel aria-label="Aisle"' + (sorted.length ? '' : ' hidden') + '><option value="">Choose an aisle</option>' + sorted.map(function (n) { return '<option value="' + esc(n) + '"' + (n === foundN ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '<option value="__new__"' + (customN ? ' selected' : '') + '>Other... (type a name)</option></select>' +
+      '<input data-ps placeholder="Section" value="' + esc(foundN || p.section || '') + '" autocapitalize="characters"' + (sorted.length && !customN ? ' hidden' : '') + '>' +
+      '<select data-pfsel aria-label="Shelf"' + (shInfo ? '' : ' hidden') + '>' + shelfOptions(shInfo, p.shelf) + '</select>' +
+      '<input data-pf placeholder="Shelf (0 = on top, 3-2 = shelf 3 section 2)" value="' + esc(p.shelf || '') + '"' + (shInfo ? ' hidden' : '') + '>' +
       '<input data-pq inputmode="numeric" placeholder="How many here (optional)" value="' + esc(p.q || '') + '"></div>';
+  }
+  /* Shelf choices for a box: On top, each shelf, and each section of a shelf that has dividers. */
+  function shelfOptions(info, cur) {
+    if (!info) return '';
+    var c = String(cur == null ? '' : cur).trim(), h = '<option value="">Choose a shelf</option>', i, j;
+    var one = function (v, label) { h += '<option value="' + v + '"' + (c === v ? ' selected' : '') + '>' + label + '</option>'; };
+    one('0', 'On top of the box');
+    for (i = 1; i <= Math.max(1, info.shelves); i++) {
+      one(String(i), 'Shelf ' + i + (i === 1 ? (info.topFirst ? ' (top)' : ' (bottom)') : ''));
+      var cc = info.cells && info.cells[i - 1] ? info.cells[i - 1] : 1;
+      if (cc > 1) for (j = 1; j <= cc; j++) one(i + '-' + j, 'Shelf ' + i + ' · section ' + j);
+    }
+    if (c && !new RegExp('value="' + c.replace(/[^\w-]/g, '') + '"').test(h)) h += '<option value="' + esc(c) + '" selected>' + esc(c) + '</option>';
+    return h;
   }
   function renderPlaces(it) {
     var host = $('#placesHost'), pl = (it && it.places) || [];
@@ -199,12 +216,23 @@
     if (e.target.closest('#placeAdd')) { $('#placeRows').insertAdjacentHTML('beforeend', placeRowHtml({})); return; }
     var rm = e.target.closest('[data-prm]'); if (rm) rm.closest('.placerow').remove();
   });
+  function rowShelf(row) {
+    var sec = norm(row.querySelector('[data-ps]').value), mp = row.querySelector('[data-pmap]').value, info = sec && window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(sec, mp) : null;
+    var fs = row.querySelector('[data-pfsel]'), fi = row.querySelector('[data-pf]');
+    fs.innerHTML = shelfOptions(info, fi.value); fs.hidden = !info; fi.hidden = !!info;
+  }
   $('#placesHost').addEventListener('change', function (e) {
-    var sl = e.target.closest('[data-pmap]'); if (!sl) return;
-    var row = sl.closest('.placerow'), id = sl.value, names = window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(id) : [];
-    var dl = row.querySelector('datalist'); dl.id = 'dl-pm-' + id; row.querySelector('[data-ps]').setAttribute('list', dl.id);
-    dl.innerHTML = names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('');
+    var row = e.target.closest('.placerow'); if (!row) return;
+    var ps = row.querySelector('[data-ps]'), ssel = row.querySelector('[data-pssel]');
+    if (e.target.closest('[data-pmap]')) {
+      var names = (window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames(e.target.value) : []).slice().sort(cmp);
+      ssel.innerHTML = '<option value="">Choose an aisle</option>' + names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') + '<option value="__new__">Other... (type a name)</option>';
+      ssel.hidden = !names.length; ps.value = ''; ps.hidden = !!names.length; row.querySelector('[data-pf]').value = ''; rowShelf(row); return;
+    }
+    if (e.target.closest('[data-pssel]')) { var o = ssel.value === '__new__'; ps.value = o ? '' : ssel.value; ps.hidden = !o; row.querySelector('[data-pf]').value = ''; if (o) ps.focus(); rowShelf(row); return; }
+    if (e.target.closest('[data-pfsel]')) { row.querySelector('[data-pf]').value = e.target.value; }
   });
+  $('#placesHost').addEventListener('input', function (e) { var row = e.target.closest('.placerow'); if (row && e.target.closest('[data-ps]')) rowShelf(row); });
   function renderList() {
     var list = $('#list'), empty = $('#emptyHost'), more = $('#moreBtn');
     var res = filtered();
@@ -390,16 +418,33 @@
     $('#formErr').hidden = true;
     $('#saveNextBtn').hidden = !!it;
     $('#sheetScrim').hidden = false;
-    syncShelfPick();
+    syncTypeSel(); syncAisleSel(); syncShelfPick();
     renderPlaces(it);
     if (!it) setTimeout(function () { F.brand.focus(); }, 30);
-    else if (!it.section) setTimeout(function () { F.section.focus(); }, 30);
   }
+  /* Type and Aisle are chosen from lists. Only "Other..." (or a value not on the list) shows a typing box. */
+  function pickSel(sel, input, opts, cur, blank, otherLabel) {
+    var low = norm(cur).toLowerCase(), found = opts.filter(function (o) { return o.toLowerCase() === low; })[0], custom = !!norm(cur) && !found;
+    if (found) input.value = found;
+    sel.innerHTML = '<option value="">' + blank + '</option>' + opts.map(function (o) { return '<option value="' + esc(o) + '"' + (o === found ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '<option value="__new__"' + (custom ? ' selected' : '') + '>' + otherLabel + '</option>';
+    sel.hidden = !opts.length; input.hidden = !!opts.length && !custom;
+  }
+  function syncTypeSel() {
+    var opts = Array.prototype.map.call($('#dl-types').options, function (o) { return o.value; }).filter(function (v) { return v && !/^\.?\d+(\.\d+)?\s*(l|ml|oz|fl ?oz|pk|pack)$/i.test(v.trim()); }).sort(cmp);
+    pickSel($('#f-typesel'), F.type, opts, F.type.value, 'No type', 'Other... (type a name)');
+  }
+  function syncAisleSel() {
+    var names = window.ShelfMap && window.ShelfMap.zoneNames ? window.ShelfMap.zoneNames().slice().sort(cmp) : [];
+    pickSel($('#f-secsel'), F.section, names, F.section.value, 'Choose an aisle', 'Other... (type a name)');
+  }
+  $('#f-typesel').addEventListener('change', function () { var o = this.value === '__new__'; F.type.value = o ? '' : this.value; F.type.hidden = !o; if (o) F.type.focus(); });
+  $('#f-secsel').addEventListener('change', function () { var o = this.value === '__new__'; F.section.value = o ? '' : this.value; F.shelf.value = ''; F.section.hidden = !o; if (o) F.section.focus(); syncShelfPick(); });
   /* A shelf can be written 3-2 (shelf 3, section 2 counted from the left). */
   function shelfParts(v) { var m = /^\s*(\d+)\s*[-.,/]\s*(\d+)\s*$/.exec(String(v == null ? '' : v)); return m ? { shelf: m[1], slot: m[2] } : null; }
   function shelfLab(v) { var m = shelfParts(v); return m ? m.shelf + ', section ' + m.slot : String(v == null ? '' : v); }
   function syncShelfPick() {
     var host = $('#shelfPick'), info = window.ShelfMap && window.ShelfMap.zoneInfo ? window.ShelfMap.zoneInfo(F.section.value) : null;
+    F.shelf.closest('.field').hidden = !!info && info.shelves >= 2;
     if (!info || info.shelves < 2) { host.innerHTML = ''; host.hidden = true; return; }
     var raw = String(F.shelf.value || '').trim(), pr = shelfParts(raw), cur = pr ? pr.shelf : raw, h = '', cn = pr || /^\d+$/.test(raw) ? parseInt(cur, 10) : -1, sec = '';
     for (var i = 0; i <= info.shelves; i++) h += '<button class="chip" type="button" data-shelf="' + i + '" aria-pressed="' + (cur === String(i)) + '">' + i + '</button>';
@@ -1493,7 +1538,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v89';
+  var APP_VERSION = 'v90';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
