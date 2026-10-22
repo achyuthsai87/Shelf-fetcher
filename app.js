@@ -828,6 +828,32 @@
     ov.innerHTML = '<div class="popcard" role="dialog" aria-modal="true">' + html + '</div>';
     document.body.appendChild(ov);
     var card = ov.firstChild, vv = window.visualViewport, scanEl = document.getElementById('scanOv');
+    /* Pull the card down to close it, same as its Cancel button. */
+    (function () {
+      var y0 = null, dy = 0, eng = false, t0 = 0, CLS = '[data-pcancel],[data-pclose],[data-lclose],[data-tbclose],[data-rclose]';
+      card.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { y0 = null; return; }
+        var inTop = e.touches[0].clientY - card.getBoundingClientRect().top < 44, t = e.target, formEl = t.closest && t.closest('input,textarea,select,button,label');
+        y0 = (inTop || (card.scrollTop <= 0 && !formEl)) ? e.touches[0].clientY : null; dy = 0; eng = false; t0 = Date.now();
+      }, { passive: true });
+      card.addEventListener('touchmove', function (e) {
+        if (y0 === null) return;
+        dy = e.touches[0].clientY - y0;
+        if (!eng) { if (dy > 10) { eng = true; card.style.transition = 'none'; } else { if (dy < -10) y0 = null; return; } }
+        if (e.cancelable) e.preventDefault();
+        card.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+      }, { passive: false });
+      function end() {
+        if (y0 === null) return;
+        var was = eng, go = eng && (dy > 100 || (dy > 50 && Date.now() - t0 < 250));
+        y0 = null; eng = false;
+        if (!was) return;
+        card.style.transition = 'transform .18s ease';
+        if (go) { card.style.transform = 'translateY(110%)'; setTimeout(function () { card.style.transition = ''; card.style.transform = ''; var b = card.querySelector(CLS); if (b) b.click(); }, 170); }
+        else { card.style.transform = ''; setTimeout(function () { card.style.transition = ''; }, 200); }
+      }
+      card.addEventListener('touchend', end); card.addEventListener('touchcancel', end);
+    })();
     /* Keep the pop-up inside the part of the screen the keyboard leaves free, with the typing box at the top. */
     function fit() { if (!vv) return; ov.style.top = vv.offsetTop + 'px'; ov.style.height = vv.height + 'px'; ov.style.bottom = 'auto'; }
     function mode() { ov.classList.toggle('top', !!card.querySelector('input:not([type=checkbox])')); }
@@ -1404,6 +1430,30 @@
       sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
     });
   })();
+  /* While any pop-up or sheet is open, the page behind it cannot scroll. */
+  (function () {
+    var locked = false, savedY = 0;
+    function anyOpen() { return !!document.querySelector('.scrim:not([hidden]), .popov, #scanOv:not([hidden])'); }
+    function sync() {
+      var want = anyOpen(), b = document.body;
+      if (want === locked) return;
+      locked = want;
+      if (want) {
+        savedY = window.pageYOffset || 0;
+        b.style.position = 'fixed'; b.style.top = (-savedY) + 'px'; b.style.left = '0'; b.style.right = '0'; b.style.width = '100%';
+      } else {
+        b.style.position = ''; b.style.top = ''; b.style.left = ''; b.style.right = ''; b.style.width = '';
+        window.scrollTo(0, savedY);
+      }
+    }
+    new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['hidden', 'class'], subtree: true, childList: true });
+    /* A finger on the dark area around a sheet does nothing. */
+    document.addEventListener('touchmove', function (e) {
+      var t = e.target;
+      if (locked && t.closest && t.classList && (t.classList.contains('scrim') || t.classList.contains('popov')) && e.cancelable) e.preventDefault();
+    }, { passive: false });
+    sync();
+  })();
   window.ShelfApp = {
     mergeBottles: mergeBottles,
     items: function () { return items; },
@@ -1443,7 +1493,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v88';
+  var APP_VERSION = 'v89';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
