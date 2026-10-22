@@ -1305,9 +1305,17 @@
           window.ShelfScan.log({ text: it.brand + (it.flavor ? ' ' + it.flavor : '') + ' linked and added', cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
         }
         function main() {
-          card.innerHTML = '<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not linked to a bottle yet. Link it to a bottle in your list, or add it as a new bottle.</p>' + candHtml() + '<div class="popbtns"><button class="btn grow" data-plink type="button">Link to a bottle</button></div><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+          card.innerHTML = '<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not linked to a bottle yet. Link it to a bottle in your list, or add it as a new bottle.</p>' + candHtml() + '<div class="popbtns"><button class="btn grow" data-plink type="button">Link to a bottle</button></div><div class="popbtns"><label class="btn grow">Photo for later<input id="capFile2" type="file" accept="image/*" capture="environment" hidden></label></div><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
           card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
           card.querySelector('[data-plink]').addEventListener('click', link);
+          card.querySelector('#capFile2').addEventListener('change', function (e) {
+            var f = e.target.files && e.target.files[0]; if (!f) return;
+            card.querySelector('h3').textContent = 'Saving...';
+            shrink(f, 1400).then(function (blob) { return capPut({ code: code, photo: blob, at: Date.now(), spot: stockSpotLabel(c) }); }).then(function () {
+              skipped[k] = 1; close(); resume(); refreshCapInfo();
+              window.ShelfScan.log({ text: code + ' photo saved for later', cls: 'ok', undo: function () { capDel(code).then(function () { delete skipped[k]; refreshCapInfo(); }); } });
+            }, function () { toast('Could not save the photo. This phone may be out of space.'); main(); });
+          });
           card.querySelector('[data-padd]').addEventListener('click', add);
           card.querySelectorAll('[data-pickc]').forEach(function (b) { b.addEventListener('click', function () { var it = items.filter(function (x) { return x.id === b.getAttribute('data-pickc'); })[0]; if (it) linkTo(it); }); });
         }
@@ -1485,7 +1493,7 @@
   }
   function sheets(list, card, back) {
     card.innerHTML = '<h3>Making sheets...</h3><p id="capProg">0 of ' + list.length + '</p>';
-    var per = 4, W = 1600, H = 1640, out = [], i = 0, rows = [['barcode', 'sheet', 'position']];
+    var per = 4, W = 1600, H = 1640, out = [], i = 0, rows = [['barcode', 'sheet', 'position', 'spot']];
     function next() {
       if (i >= list.length) { show(); return; }
       var chunk = list.slice(i, i + per), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -1494,10 +1502,10 @@
       (function one() {
         if (k >= chunk.length) { cv.toBlob(function (b) { out.push(b); i += per; var p = card.querySelector('#capProg'); if (p) p.textContent = Math.min(i, list.length) + ' of ' + list.length; setTimeout(next, 0); }, 'image/jpeg', 0.86); return; }
         var rec = chunk[k], x = (k % 2) * 800, y = Math.floor(k / 2) * 820;
-        rows.push([rec.code, n, k + 1]);
+        rows.push([rec.code, n, k + 1, '"' + String(rec.spot || '').replace(/"/g, '') + '"']);
         blobImg(rec.photo).then(function (im) {
           var s = Math.min(792 / im.naturalWidth, 766 / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
-          cx.fillStyle = '#000'; cx.fillRect(x + 4, y + 4, 792, 44); cx.fillStyle = '#fff'; cx.font = 'bold 30px sans-serif'; cx.fillText(rec.code, x + 14, y + 36);
+          cx.fillStyle = '#000'; cx.fillRect(x + 4, y + 4, 792, 44); cx.fillStyle = '#fff'; cx.font = 'bold 30px sans-serif'; cx.fillText(rec.code + (rec.spot ? '   ' + rec.spot : ''), x + 14, y + 36);
           cx.drawImage(im, x + 4 + (792 - w) / 2, y + 52, w, h);
           k++; one();
         }, function () { k++; one(); });
@@ -1744,7 +1752,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v99';
+  var APP_VERSION = 'v100';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
