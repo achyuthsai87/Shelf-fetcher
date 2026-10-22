@@ -58,7 +58,7 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: none; }
-html, body { margin: 0; }
+html, body { margin: 0; overflow-x: clip; max-width: 100%; }
 button, .tabbar, .hero, h1, .sub, .chip, .seg { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 input, textarea { -webkit-user-select: text; user-select: text; }
 button, a, input, select, summary { touch-action: manipulation; }
@@ -126,7 +126,7 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .searchbar::before {
   content: "";
   position: absolute;
-  inset: 0 -16px;
+  inset: 0 -14px;
   z-index: -1;
   background: var(--bg);
   -webkit-mask-image: linear-gradient(#000 75%, transparent);
@@ -287,6 +287,9 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
   display: grid;
   gap: 14px;
 }
+.sheet { position: relative; }
+.sheet::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--ink); opacity: .22; pointer-events: none; }
+.sheet { touch-action: pan-y; overscroll-behavior: contain; }
 .sheet h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .field { display: grid; gap: 5px; min-width: 0; }

@@ -1345,6 +1345,36 @@
     renderAll();
     return { added: add, updated: upd, same: same, bad: bad };
   }
+  /* Pull a sheet down to close it (from the grab bar, or from its top when it is not scrolled). Same as pressing its Cancel. */
+  (function () {
+    var CL = { sheetScrim: '#cancelBtn', importScrim: '#importCancel', stockScrim: '#stockClose', linkScrim: '#linkClose', zoneScrim: '#zCancel', photoScrim: '#photoClose' };
+    Array.prototype.forEach.call(document.querySelectorAll('.scrim'), function (sc) {
+      var sh = sc.querySelector('.sheet'), cl = CL[sc.id]; if (!sh || !cl) return;
+      var y0 = null, dy = 0, eng = false, t0 = 0;
+      sh.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { y0 = null; return; }
+        var t = e.target, inHandle = e.touches[0].clientY - sh.getBoundingClientRect().top < 48, formEl = t.closest && t.closest('input,textarea,select,button,label');
+        y0 = (inHandle || (sh.scrollTop <= 0 && !formEl)) ? e.touches[0].clientY : null; dy = 0; eng = false; t0 = Date.now();
+      }, { passive: true });
+      sh.addEventListener('touchmove', function (e) {
+        if (y0 === null) return;
+        dy = e.touches[0].clientY - y0;
+        if (!eng) { if (dy > 10) { eng = true; sh.style.transition = 'none'; } else { if (dy < -10) y0 = null; return; } }
+        if (e.cancelable) e.preventDefault();
+        sh.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+      }, { passive: false });
+      function end() {
+        if (y0 === null) return;
+        var was = eng, go = eng && (dy > 110 || (dy > 50 && Date.now() - t0 < 250));
+        y0 = null; eng = false;
+        if (!was) return;
+        sh.style.transition = 'transform .18s ease';
+        if (go) setTimeout(function () { sh.style.transition = ''; sh.style.transform = ''; var b = document.querySelector(cl); if (b) b.click(); }, 170), sh.style.transform = 'translateY(100%)';
+        else { sh.style.transform = ''; setTimeout(function () { sh.style.transition = ''; }, 200); }
+      }
+      sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
+    });
+  })();
   window.ShelfApp = {
     mergeBottles: mergeBottles,
     items: function () { return items; },
@@ -1384,7 +1414,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v84';
+  var APP_VERSION = 'v85';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
