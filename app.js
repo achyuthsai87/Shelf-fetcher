@@ -1539,16 +1539,6 @@
   function sheetCfg() { try { var c = JSON.parse(localStorage.getItem(SHEETKEY) || 'null'); return c && c.url ? c : null; } catch (e) { return null; } }
   function sheetQ() { try { var q = JSON.parse(localStorage.getItem(SHEETQ) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
   function setSheetQ(q) { try { localStorage.setItem(SHEETQ, JSON.stringify(q)); } catch (e) {} }
-  function sheetScript() {
-    return "function doGet() { return out({ ok: true, hello: 'Shelf Finder sheet is ready' }); }\n" +
-      "function doPost(e) {\n  var d = {}; try { d = JSON.parse(e.postData.contents); } catch (x) {}\n" +
-      "  var lock = LockService.getScriptLock(); lock.waitLock(10000);\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var sh = ss.getSheetByName('Scans') || ss.insertSheet('Scans');\n" +
-      "    if (sh.getLastRow() === 0) { sh.appendRow(['Time', 'Barcode', 'SKU', 'Full name', 'Type', 'Size', 'Proof', 'Flavor', 'Notes']); sh.setFrozenRows(1); sh.getRange('B:B').setNumberFormat('@'); }\n" +
-      "    if (d.action === 'ping') return out({ ok: true });\n    var code = String(d.code || '').trim();\n    if (!code) return out({ ok: false, error: 'empty' });\n" +
-      "    var last = sh.getLastRow();\n    if (last > 1) { var v = sh.getRange(2, 2, last - 1, 1).getDisplayValues(); for (var i = 0; i < v.length; i++) if (v[i][0] === code) return out({ ok: true, dup: true }); }\n" +
-      "    var r = last + 1;\n    sh.getRange(r, 2).setNumberFormat('@').setValue(code);\n    sh.getRange(r, 1).setValue(new Date());\n    return out({ ok: true, row: r });\n  } finally { lock.releaseLock(); }\n}\n" +
-      "function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }\n";
-  }
   function sheetSend(cfg, payload) {
     return new Promise(function (res, rej) {
       var done = false, t = setTimeout(function () { if (!done) { done = true; rej(new Error('timeout')); } }, 9000);
@@ -1567,28 +1557,22 @@
     }
     return next();
   }
-  function copyText(txt, b, label) {
-    function ok() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = label; }, 1800); }
-    function fallback() { var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('Could not copy.'); } ta.remove(); }
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, fallback); else fallback();
-  }
   function sheetStatus() {
     var cfg = sheetCfg(), w = sheetQ().length;
     $('#shStatus').textContent = cfg ? 'Connected.' + (w ? ' ' + w + ' barcode' + (w === 1 ? '' : 's') + ' waiting to send.' : '') : 'Not connected yet.';
     $('#shStatus').className = 'hint ' + (cfg ? 'ok' : '');
-    $('#shUrl').value = cfg ? cfg.url : '';
+    $('#shUrl').value = cfg ? cfg.url : ''; $('#shSecret').value = cfg ? (cfg.secret || '') : '';
     $('#shDisc').hidden = !cfg;
   }
-  $('#shCopy').addEventListener('click', function () { copyText(sheetScript(), this, 'Copy script'); });
-  $('#shConnect').addEventListener('click', function () {
+    $('#shConnect').addEventListener('click', function () {
     var url = norm($('#shUrl').value), m = $('#shMsg');
     if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) { m.textContent = 'That is not the Web app URL. It starts with https://script.google.com and ends in /exec.'; return; }
     m.textContent = 'Testing...';
-    var c = { url: url };
+    var c = { url: url, secret: norm($('#shSecret').value) };
     sheetSend(c, { action: 'ping' }).then(function () {
       try { localStorage.setItem(SHEETKEY, JSON.stringify(c)); } catch (e) {}
       m.textContent = ''; sheetStatus(); toast('Sheet connected.'); sheetFlush();
-    }, function (e) { m.textContent = e && e.message === 'secret' ? 'That is an older script. Tap Copy script, paste it over the old one, Save, then Deploy, Manage deployments, pencil, New version, Deploy.' : 'Could not reach it. Check the URL, that access is set to Anyone, and that you deployed.'; });
+    }, function (e) { m.textContent = e && e.message === 'secret' ? 'The secret does not match the one in the script. Fix it, or deploy the script as a New version if you changed it.' : 'Could not reach it. Check the URL, that access is set to Anyone, and that you deployed.'; });
   });
   $('#shDisc').addEventListener('click', function () { try { localStorage.removeItem(SHEETKEY); } catch (e) {} sheetStatus(); toast('Sheet disconnected.'); });
   sheetStatus();
@@ -1837,7 +1821,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v105';
+  var APP_VERSION = 'v106';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

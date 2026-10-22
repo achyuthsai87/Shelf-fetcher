@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=105">
+<link rel="stylesheet" href="style.css?v=106">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -128,16 +128,14 @@
     </div>
     <div class="glass card" id="sheetCard">
       <h2>Google Sheet for barcodes</h2>
-      <p>Scanned barcodes land in your own Sheet, one per row. Set up once.</p>
+      <p>Scanned barcodes are added to your Sheet, one per row.</p>
       <div class="stack">
         <p id="shStatus" class="hint"></p>
-        <ol class="hint steps"><li>Open your Sheet, then Extensions, then <b>Apps Script</b>.</li><li>Tap <b>Copy script</b> here, delete everything in Apps Script, paste, Save.</li><li>Deploy, New deployment, type <b>Web app</b>. Run as <b>Me</b>, access <b>Anyone</b>. Deploy, allow access.</li><li>Copy the <b>Web app URL</b>, paste it below, tap Connect.</li></ol>
-        <button class="btn ghost block" id="shCopy" type="button">Copy script</button>
         <div class="field"><label for="shUrl">Web app URL</label><input id="shUrl" placeholder="https://script.google.com/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="shSecret">Secret</label><input id="shSecret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
         <p class="hint" id="shMsg"></p>
-        <button class="btn block" id="shConnect" type="button">Connect</button>
-        <button class="btn ghost block" id="shDisc" type="button" hidden>Disconnect</button>
-        <p class="hint">Keep the Web app URL private. Anyone with it can add rows to that Sheet.</p>
+        <button class="btn block" id="shConnect" type="button">Save</button>
+        <button class="btn ghost block" id="shDisc" type="button" hidden>Remove this sheet</button>
       </div>
     </div>
     <div class="glass card">
@@ -323,11 +321,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=105"></script>
-<script src="app.js?v=105"></script>
-<script src="photo.js?v=105"></script>
-<script src="scan.js?v=105"></script>
-<script src="map.js?v=105"></script>
-<script src="backup.js?v=105"></script>
+<script src="search.js?v=106"></script>
+<script src="app.js?v=106"></script>
+<script src="photo.js?v=106"></script>
+<script src="scan.js?v=106"></script>
+<script src="map.js?v=106"></script>
+<script src="backup.js?v=106"></script>
 </body>
 </html>
