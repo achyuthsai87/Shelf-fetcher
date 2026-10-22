@@ -1202,6 +1202,44 @@
   });
   function typeOnto(it, c) { if (!c.type || it.type) return it; var r = copyRaw(it); r.type = c.type; return mk(r); }
 
+  /* Auto-link: match the name found online for a barcode against the bottle list. */
+  function mlOf(s) {
+    var m = /(\d*\.?\d+)\s*(ml|l|oz|fl\.?\s*oz)\b/i.exec(String(s || '').replace(/,/g, ''));
+    if (!m) return 0;
+    var n = parseFloat(m[1]), u = m[2].toLowerCase().replace(/[\s.]/g, '');
+    return u === 'ml' ? n : u === 'l' ? n * 1000 : n * 29.57;
+  }
+  function nameToks(s) {
+    return String(s || '').toLowerCase().replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(function (t) {
+      return t.length >= 2 && !/^\d+$/.test(t) && !/^\d*\.?\d+(ml|l|oz)$/.test(t) && ['ml', 'oz', 'fl', 'the', 'and', 'of'].indexOf(t) < 0;
+    });
+  }
+  function tokHit(it, ot) { return it === ot || (ot.length > it.length && ot.indexOf(it) === 0 && it.length >= 3) || (it.length > ot.length && it.indexOf(ot) === 0 && ot.length >= 3); }
+  /* Returns bottles that fit the online name, best first. */
+  function matchBottles(info) {
+    if (!info || !info.name) return [];
+    var on = nameToks(info.name), os = mlOf(info.size) || mlOf(info.name), out = [];
+    if (!on.length) return [];
+    items.forEach(function (it) {
+      var txt = (/^\d+$/.test(it.brand) ? '' : it.brand) + ' ' + (it.flavor || ''), its = nameToks(txt);
+      if (its.length < 2) return;
+      var hit = 0; its.forEach(function (t) { if (on.some(function (o) { return tokHit(t, o); })) hit++; });
+      if (hit < its.length) return;
+      var cov = its.length / on.length, im = mlOf(it.size);
+      if (os && im && Math.abs(os - im) > Math.max(5, im * 0.04)) return;
+      out.push({ it: it, n: its.length, cov: cov, sizeOk: !!(os && im), hasCode: !!it.code });
+    });
+    out.sort(function (x, y) { return y.n - x.n || y.cov - x.cov; });
+    return out;
+  }
+  /* Sure enough to link without asking: one clear winner, size confirmed, no barcode on it yet. */
+  function sureMatch(list) {
+    if (!list.length) return null;
+    var t = list[0], nx = list[1];
+    if (!t.sizeOk || t.hasCode || t.n < 2 || t.cov < 0.6) return null;
+    if (nx && nx.n >= t.n) return null;
+    return t.it;
+  }
   $('#stockForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var section = norm($('#stSection').value), shelf = norm($('#stShelf').value);
@@ -1220,9 +1258,28 @@
       return '<b>' + esc(stockSpotLabel(c)) + '</b><span>' + (check ? 'Checking: ' + Object.keys(scannedIds).length + ' scanned of ' + expected.length + ' listed' : progressText() + (c.type ? ' · ' + esc(c.type) : '') + ' · scan each bottle') + '</span>' + (check ? '' : quickBar(c));
     }
     stockCtl = check ? null : { c: c, refresh: function () { window.ShelfScan.setHead(headHtml()); } };
-    function stockUnknown(code, k) {
+    function stockUnknown(code, k, pre) {
       window.ShelfScan.hold(true);
       function resume() { window.ShelfScan.hold(false); }
+      var autoOn = $('#stAuto') && $('#stAuto').checked;
+      if (autoOn && pre === undefined) {
+        window.ShelfScan.log({ text: 'Looking up ' + code + '...' });
+        lookupCode(code).then(function (info) {
+          var cands = matchBottles(info), sure = sureMatch(cands);
+          if (sure) {
+            var snap = copyRaw(sure), raw = copyRaw(sure); raw.code = addCode(raw.code, code);
+            var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c); upd = typeOnto(upd, c);
+            try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); stockUnknown(code, k, info || null); return; }
+            placed++; resume(); window.ShelfScan.setHead(headHtml());
+            window.ShelfScan.log({ text: 'Linked automatically: ' + sure.brand + (sure.flavor ? ' ' + sure.flavor : '') + (sure.size ? ' ' + sure.size : ''), cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
+            return;
+          }
+          stockUnknown(code, k, { info: info, cands: cands });
+        });
+        return;
+      }
+      var haveInfo = pre !== undefined, preInfo = pre && pre.info !== undefined ? pre.info : (pre || null), preC = (pre && pre.cands) || [];
+      function getInfo() { return haveInfo ? Promise.resolve(preInfo) : lookupCode(code); }
       function cancel(close) { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); close(); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad', action: { label: 'Add', fn: function () { delete skipped[k]; stockUnknown(code, k); } } }); }
       function create(info, close) {
         var raw = { id: newId(), brand: info.name, size: info.size || '', type: info.type || c.type || '', code: code };
@@ -1234,15 +1291,29 @@
       }
       popup('', function (ov, close) {
         var card = ov.querySelector('.popcard');
+        function candHtml() {
+          if (!preC.length) return '';
+          return '<p class="hint">Looks like one of these. Tap the right one:</p><div class="poplist">' + preC.slice(0, 3).map(function (r) {
+            var it = r.it; return '<button class="linkrow" type="button" data-pickc="' + esc(it.id) + '"><b>' + esc(it.flavor || it.brand) + '</b>' + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + (it.code ? ' <small>(has a barcode)</small>' : '') + '</button>';
+          }).join('') + '</div>';
+        }
+        function linkTo(it) {
+          var snap = copyRaw(it), raw = copyRaw(it); raw.code = addCode(raw.code, code);
+          var upd = mk(raw); if (!itemHere(upd, c)) upd = placeAt(upd, c); upd = typeOnto(upd, c);
+          try { save(upd); } catch (err) { toast('Could not save. This phone is out of space.'); return; }
+          placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
+          window.ShelfScan.log({ text: it.brand + (it.flavor ? ' ' + it.flavor : '') + ' linked and added', cls: 'ok', undo: function () { try { save(mk(snap)); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
+        }
         function main() {
-          card.innerHTML = '<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not linked to a bottle yet. Link it to a bottle in your list, or add it as a new bottle.</p><div class="popbtns"><button class="btn grow" data-plink type="button">Link to a bottle</button></div><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+          card.innerHTML = '<h3>Not found</h3><p>The barcode <b>' + esc(code) + '</b> is not linked to a bottle yet. Link it to a bottle in your list, or add it as a new bottle.</p>' + candHtml() + '<div class="popbtns"><button class="btn grow" data-plink type="button">Link to a bottle</button></div><div class="popbtns"><button class="btn grow" data-padd type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
           card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
           card.querySelector('[data-plink]').addEventListener('click', link);
           card.querySelector('[data-padd]').addEventListener('click', add);
+          card.querySelectorAll('[data-pickc]').forEach(function (b) { b.addEventListener('click', function () { var it = items.filter(function (x) { return x.id === b.getAttribute('data-pickc'); })[0]; if (it) linkTo(it); }); });
         }
         function add() {
           card.innerHTML = '<h3>Looking it up</h3><p>Finding the name for <b>' + esc(code) + '</b>...</p>';
-          lookupCode(code).then(function (info) {
+          getInfo().then(function (info) {
             /* Open the full Add bottle form with everything known filled in, so all the details can be set right here. */
             var pre = { brand: info ? info.name : '', size: info ? (info.size || sizeFrom(info.name)) : '', type: (info && info.type) || c.type || '', code: code };
             if (!c.m || c.m === 'main') { pre.section = c.section; pre.shelf = c.shelf; } else pre.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
@@ -1270,7 +1341,7 @@
           q.addEventListener('input', function () { typed = true; render(); });
           setTimeout(function () { q.focus(); }, 40);
           on.textContent = 'Looking up the name online to help...';
-          lookupCode(code).then(function (info) {
+          getInfo().then(function (info) {
             if (!card.contains(on)) return;
             if (info && !typed) { on.textContent = 'Online name: ' + info.name; q.value = info.name.replace(/['’`]/g, '').replace(/\d+(?:\.\d+)?\s*(?:ml|l|oz|fl\.?\s*oz)\b/ig, '').trim().split(/\s+/).slice(0, 2).join(' '); render(); } else on.textContent = info ? 'Online name: ' + info.name : '';
           });
@@ -1550,7 +1621,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v96';
+  var APP_VERSION = 'v97';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
