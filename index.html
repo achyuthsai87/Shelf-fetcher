@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=87">
+<link rel="stylesheet" href="style.css?v=88">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -120,6 +120,8 @@
       <h2>Add many at once</h2>
       <p>Pick a CSV file or paste a list. Column headers like Brand, Flavor, Type, Size, Aisle, Shelf are matched by name, in any order. Bottles already listed get their location updated instead of duplicated.</p>
       <button class="btn block" id="importBtn" type="button">Import a list</button>
+      <button class="btn ghost block" id="undoLastImport" type="button" hidden>Undo last import</button>
+      <p class="hint">Undo stays available until you close the app. After that, use Automatic backups below: the newest one named &ldquo;Before importing&rdquo; is your list as it was.</p>
     </div>
     <div class="glass card">
       <h2>Back up or move to another phone</h2>
@@ -303,11 +305,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=87"></script>
-<script src="app.js?v=87"></script>
-<script src="photo.js?v=87"></script>
-<script src="scan.js?v=87"></script>
-<script src="map.js?v=87"></script>
-<script src="backup.js?v=87"></script>
+<script src="search.js?v=88"></script>
+<script src="app.js?v=88"></script>
+<script src="photo.js?v=88"></script>
+<script src="scan.js?v=88"></script>
+<script src="map.js?v=88"></script>
+<script src="backup.js?v=88"></script>
 </body>
 </html>

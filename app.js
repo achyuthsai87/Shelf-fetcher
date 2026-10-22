@@ -557,7 +557,7 @@
   }
   /* One tap to undo the import that just ran. (An automatic backup was also saved first.) */
   var importUndoRaw = null;
-  function offerUndo(prevRaw) { importUndoRaw = prevRaw; $('#importUndo').hidden = !prevRaw; }
+  function offerUndo(prevRaw) { importUndoRaw = prevRaw; $('#importUndo').hidden = !prevRaw; $('#undoLastImport').hidden = !prevRaw; }
   /* A clear "working" state while an import runs, then a finished card, so you can tell matching from done. */
   var CHECK = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="dc" cx="26" cy="26" r="23"/><path class="dk" d="M15 27l8 8 15-17"/></svg>';
   var WARN = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="dc w" cx="26" cy="26" r="23"/><path class="dk w" d="M26 14v16M26 37v1"/></svg>';
@@ -584,6 +584,7 @@
   var doneClosesImport = false;
   function closeDone() { $('#doneScrim').hidden = true; $('#doneUndo').hidden = true; if (doneClosesImport) { $('#importScrim').hidden = true; doneClosesImport = false; } }
   $('#doneOk').addEventListener('click', closeDone);
+  $('#undoLastImport').addEventListener('click', function () { $('#importUndo').click(); toast('Import undone. Your list is back the way it was.'); });
   $('#doneUndo').addEventListener('click', function () { $('#importUndo').click(); closeDone(); toast('Import undone. Your list is back the way it was.'); });
   function runImportNow() {
     offerUndo(null);
@@ -1326,7 +1327,7 @@
     var cur = items;
     items = importUndoRaw.map(mk);
     if (!saveLocal()) { items = cur; toast('This phone has no room left to undo.'); return; }
-    importUndoRaw = null; this.hidden = true; renderAll();
+    importUndoRaw = null; this.hidden = true; $('#undoLastImport').hidden = true; renderAll();
     var m = $('#importMsg'); m.textContent = 'Import undone. Your list is back the way it was.'; m.hidden = false;
   });
   $('#mergeBackupBtn').addEventListener('click', function () { $('#mergeFile').click(); });
@@ -1442,7 +1443,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v87';
+  var APP_VERSION = 'v88';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
