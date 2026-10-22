@@ -1264,7 +1264,7 @@
       var autoOn = $('#stAuto') && $('#stAuto').checked;
       if (autoOn && pre === undefined) {
         window.ShelfScan.log({ text: 'Looking up ' + code + '...' });
-        lookupCode(code).then(function (info) {
+        Promise.race([lookupCode(code), new Promise(function (r) { setTimeout(function () { r(null); }, 3500); })]).then(function (info) {
           var cands = matchBottles(info), sure = sureMatch(cands);
           if (sure) {
             var snap = copyRaw(sure), raw = copyRaw(sure); raw.code = addCode(raw.code, code);
@@ -1621,7 +1621,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v97';
+  var APP_VERSION = 'v98';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
