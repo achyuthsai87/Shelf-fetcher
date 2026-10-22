@@ -563,11 +563,11 @@
   var WARN = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="dc w" cx="26" cy="26" r="23"/><path class="dk w" d="M26 14v16M26 37v1"/></svg>';
   function showBusy(title, msg) {
     $('#doneIc').innerHTML = '<span class="spin" aria-hidden="true"></span>'; $('#doneIc').className = 'doneic';
-    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg || 'Please keep this open.'; $('#doneOk').hidden = true; $('#doneScrim').hidden = false;
+    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg || 'Please keep this open.'; $('#doneOk').hidden = true; $('#doneUndo').hidden = true; $('#doneScrim').hidden = false;
   }
   function showDone(ok, title, msg) {
     $('#doneIc').className = 'doneic ' + (ok ? 'good' : 'bad'); $('#doneIc').innerHTML = ok ? CHECK : WARN;
-    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg; $('#doneOk').hidden = false; $('#doneScrim').hidden = false;
+    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg; $('#doneOk').hidden = false; $('#doneUndo').hidden = true; $('#doneScrim').hidden = false;
     try { if (ok && navigator.vibrate) navigator.vibrate(15); } catch (e) {}
     setTimeout(function () { try { $('#doneOk').focus({ preventScroll: true }); } catch (e) {} }, 60);
   }
@@ -578,10 +578,13 @@
       var failed = false;
       try { runImportNow(); } catch (err) { failed = true; var m = $('#importMsg'); m.textContent = 'Something went wrong: ' + (err && err.message || err) + '. Nothing was lost; use Undo or restore a backup.'; m.hidden = false; }
       var text = $('#importMsg').textContent || '', bad = failed || /^(Choose|Pick|This file needs|This phone has no room|Something went wrong)/.test(text);
-      setTimeout(function () { showDone(!bad, bad ? 'Import not finished' : 'Import done', text); }, Math.max(0, 450 - (Date.now() - t0)));
+      setTimeout(function () { showDone(!bad, bad ? 'Import not finished' : 'Import done', text); doneClosesImport = !bad; $('#doneUndo').hidden = bad || !importUndoRaw; }, Math.max(0, 450 - (Date.now() - t0)));
     }, 60);
   }
-  $('#doneOk').addEventListener('click', function () { $('#doneScrim').hidden = true; });
+  var doneClosesImport = false;
+  function closeDone() { $('#doneScrim').hidden = true; $('#doneUndo').hidden = true; if (doneClosesImport) { $('#importScrim').hidden = true; doneClosesImport = false; } }
+  $('#doneOk').addEventListener('click', closeDone);
+  $('#doneUndo').addEventListener('click', function () { $('#importUndo').click(); closeDone(); toast('Import undone. Your list is back the way it was.'); });
   function runImportNow() {
     offerUndo(null);
     if ($('#importEnrich').checked) { runEnrich(); return; }
@@ -1439,7 +1442,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v86';
+  var APP_VERSION = 'v87';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
