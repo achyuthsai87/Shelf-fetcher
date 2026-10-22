@@ -1246,7 +1246,7 @@
           });
         }
         function link() {
-          card.innerHTML = '<h3>Which bottle is it?</h3><input class="popin" id="popQ" type="search" placeholder="Search the name or item number" autocomplete="off" autocapitalize="off" spellcheck="false"><p class="hint" id="popOnline"></p><div id="popRes" class="poplist"></div><div class="popbtns"><button class="btn ghost" data-pback type="button">Back</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+          card.innerHTML = '<h3>Which bottle is it?</h3><input class="popin" id="popQ" type="search" placeholder="Search the name or item number" autocomplete="off" autocapitalize="off" spellcheck="false"><p class="hint" id="popOnline"></p><div id="popRes" class="poplist"></div><div class="popbtns"><button class="btn grow" data-padd2 type="button">Add as a new bottle</button></div><div class="popbtns"><button class="btn ghost" data-pback type="button">Back</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
           var q = card.querySelector('#popQ'), res = card.querySelector('#popRes'), on = card.querySelector('#popOnline'), typed = false;
           function render() {
             var qv = q.value;
@@ -1263,6 +1263,7 @@
             if (!card.contains(on)) return;
             if (info && !typed) { on.textContent = 'Online name: ' + info.name; q.value = info.name.replace(/['’`]/g, '').replace(/\d+(?:\.\d+)?\s*(?:ml|l|oz|fl\.?\s*oz)\b/ig, '').trim().split(/\s+/).slice(0, 2).join(' '); render(); } else on.textContent = info ? 'Online name: ' + info.name : '';
           });
+          card.querySelector('[data-padd2]').addEventListener('click', add);
           card.querySelector('[data-pback]').addEventListener('click', main);
           card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
           res.addEventListener('click', function (e) {
@@ -1538,7 +1539,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v93';
+  var APP_VERSION = 'v94';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
