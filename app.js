@@ -412,16 +412,19 @@
   /* Add / edit sheet */
   var F = {};
   ['brand', 'flavor', 'type', 'size', 'price', 'qty', 'code', 'section', 'shelf', 'notes'].forEach(function (k) { F[k] = $('#f-' + k); });
-  function openSheet(it, pre) {
+  var sheetHooks = null;
+  function openSheet(it, pre, hooks) {
+    sheetHooks = hooks || null;
+    $('#sheetScrim').classList.toggle('over', !!hooks);
     editing = it ? it.id : null;
     var v = it || pre || {};
     $('#sheetTitle').textContent = it ? 'Edit bottle' : 'Add bottle';
     Object.keys(F).forEach(function (k) { F[k].value = v[k] || ''; });
     $('#formErr').hidden = true;
-    $('#saveNextBtn').hidden = !!it;
+    $('#saveNextBtn').hidden = !!it || !!hooks;
     $('#sheetScrim').hidden = false;
     syncTypeSel(); syncAisleSel(); syncShelfPick();
-    renderPlaces(it);
+    renderPlaces(it || pre);
     if (!it) setTimeout(function () { F.brand.focus(); }, 30);
   }
   /* Type and Aisle are chosen from lists. Only "Other..." (or a value not on the list) shows a typing box. */
@@ -455,7 +458,7 @@
     host.innerHTML = '<span class="hint">Shelf (0 = on top of the box, 1 = the ' + (info.topFirst ? 'top' : 'bottom') + ' shelf)</span><div class="chips">' + h + '</div>' + sec;
     host.hidden = false;
   }
-  function closeSheet() { $('#sheetScrim').hidden = true; editing = null; }
+  function closeSheet() { var h = sheetHooks; sheetHooks = null; $('#sheetScrim').hidden = true; $('#sheetScrim').classList.remove('over'); editing = null; if (h && h.onCancel) h.onCancel(); }
 
   function submit(another) {
     var brand = norm(F.brand.value);
@@ -478,7 +481,7 @@
     }
     carry = { type: it.type, size: it.size, section: it.section, shelf: it.shelf };
     toast('Saved ' + it.brand);
-    if (another && !editing) openSheet(null, carry); else closeSheet();
+    if (another && !editing && !sheetHooks) openSheet(null, carry); else { var h = sheetHooks; sheetHooks = null; closeSheet(); if (h && h.onSave) h.onSave(it); }
   }
 
   /* Import / export */
@@ -1240,11 +1243,17 @@
         function add() {
           card.innerHTML = '<h3>Looking it up</h3><p>Finding the name for <b>' + esc(code) + '</b>...</p>';
           lookupCode(code).then(function (info) {
-            if (info) { create(info, close); return; }
-            card.innerHTML = '<h3>No details found</h3><p>No product details exist online for <b>' + esc(code) + '</b>. Type the name once and the barcode is remembered.</p><input class="popin" id="popName" placeholder="Bottle name and size" autocomplete="off"><div class="popbtns"><button class="btn grow" data-psave type="button">Add item</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
-            var inp = card.querySelector('#popName'); setTimeout(function () { inp.focus(); }, 40);
-            card.querySelector('[data-pcancel]').addEventListener('click', function () { cancel(close); });
-            card.querySelector('[data-psave]').addEventListener('click', function () { var n = norm(inp.value); if (!n) { inp.focus(); return; } create({ name: n, size: sizeFrom(n) }, close); });
+            /* Open the full Add bottle form with everything known filled in, so all the details can be set right here. */
+            var pre = { brand: info ? info.name : '', size: info ? (info.size || sizeFrom(info.name)) : '', type: (info && info.type) || c.type || '', code: code };
+            if (!c.m || c.m === 'main') { pre.section = c.section; pre.shelf = c.shelf; } else pre.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
+            close();
+            openSheet(null, pre, {
+              onSave: function (it) {
+                placed++; resume(); window.ShelfScan.setHead(headHtml());
+                window.ShelfScan.log({ text: it.brand + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
+              },
+              onCancel: function () { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad', action: { label: 'Add', fn: function () { delete skipped[k]; stockUnknown(code, k); } } }); }
+            });
           });
         }
         function link() {
@@ -1421,7 +1430,7 @@
   $('#importScrim').addEventListener('mousedown', function (e) { if (e.target === this) this.hidden = true; });
   $('#exportBtn').addEventListener('click', exportCsv);
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { $('#sheetScrim').hidden = true; $('#importScrim').hidden = true; }
+    if (e.key === 'Escape') { if (!$('#sheetScrim').hidden) closeSheet(); $('#importScrim').hidden = true; }
   });
 
   /* Merge bottles from another phone's backup. Newest edit wins for each bottle; barcodes from both are kept; nothing is deleted. */
@@ -1541,7 +1550,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v95';
+  var APP_VERSION = 'v96';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service

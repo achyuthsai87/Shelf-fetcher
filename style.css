@@ -618,3 +618,5 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .field select + input, .field select + select { margin-top: 8px; }
 .sheet select[hidden], .sheet input[hidden], .popcard select[hidden] { display: none !important; }
 .placerow > select:not([data-pmap]), .placerow > input { grid-column: 1 / -1; width: 100%; }
+
+#sheetScrim.over { z-index: 90; }
