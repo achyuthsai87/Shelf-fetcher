@@ -120,11 +120,13 @@
       : 'Add your first bottle to get started';
   }
 
+  /* Type values that are really a price, a size or a stray number (from a messy list) are not shown as types. */
+  function junkType(v) { v = String(v || '').trim(); return !v || !/[a-z]{3}/i.test(v) || /^[$.\d]/.test(v) || /^\d+(\.\d+)?\s*(l|ml|oz|fl ?oz|pk|pack|qt|gal|k)$/i.test(v) || /^single$/i.test(v); }
   function renderChips() {
     var counts = {}, labels = {};
     items.forEach(function (i) {
       var k = i.type.toLowerCase();
-      if (!k) return;
+      if (!k || junkType(k)) return;
       counts[k] = (counts[k] || 0) + 1;
       if (!labels[k]) labels[k] = i.type;
     });
@@ -430,7 +432,7 @@
     sel.hidden = !opts.length; input.hidden = !!opts.length && !custom;
   }
   function syncTypeSel() {
-    var opts = Array.prototype.map.call($('#dl-types').options, function (o) { return o.value; }).filter(function (v) { return v && !/^\.?\d+(\.\d+)?\s*(l|ml|oz|fl ?oz|pk|pack)$/i.test(v.trim()); }).sort(cmp);
+    var opts = Array.prototype.map.call($('#dl-types').options, function (o) { return o.value; }).filter(function (v) { return !junkType(v); }).sort(cmp);
     pickSel($('#f-typesel'), F.type, opts, F.type.value, 'No type', 'Other... (type a name)');
   }
   function syncAisleSel() {
@@ -1539,7 +1541,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v94';
+  var APP_VERSION = 'v95';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
