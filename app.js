@@ -593,7 +593,7 @@
       hit.forEach(function (it) {
         if (upc.length >= 8) {
           if (/^Found - CONFLICT/i.test(st)) n.conflict++;
-          else if (/^Found/i.test(st)) { if (!hasCode(it, normKey(upc))) { var had = !!it.code; it.code = addCode(it.code, upc); n.code++; if (had) n.other++; if (/not confirmed/i.test(st)) n.unsure++; } }
+          else if (cSt < 0 || /^Found/i.test(st)) { if (!hasCode(it, normKey(upc))) { var had = !!it.code; it.code = addCode(it.code, upc); n.code++; if (had) n.other++; if (/not confirmed/i.test(st)) n.unsure++; } }
         }
         if (ty && !/^unknown$/i.test(ty) && !it.type) { it.type = ty; n.type++; }
         if (sz && !it.size) { it.size = sz; n.size++; }
@@ -1752,7 +1752,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v100';
+  var APP_VERSION = 'v101';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
