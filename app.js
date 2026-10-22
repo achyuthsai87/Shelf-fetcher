@@ -1533,6 +1533,91 @@
   $('#capBtn').addEventListener('click', startCapture);
   $('#capOpen').addEventListener('click', capDone);
   refreshCapInfo();
+
+  /* Scan to a Google Sheet: each scanned barcode is sent to a sheet you own, in the next empty row. */
+  var SHEETKEY = 'shelf-finder-sheet-v1', SHEETQ = 'shelf-finder-sheetq-v1';
+  function sheetCfg() { try { var c = JSON.parse(localStorage.getItem(SHEETKEY) || 'null'); return c && c.url && c.secret ? c : null; } catch (e) { return null; } }
+  function sheetQ() { try { var q = JSON.parse(localStorage.getItem(SHEETQ) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function setSheetQ(q) { try { localStorage.setItem(SHEETQ, JSON.stringify(q)); } catch (e) {} }
+  function sheetScript(secret) {
+    return "var SECRET = '" + secret + "';\n" +
+      "function doGet() { return out({ ok: true, hello: 'Shelf Finder sheet is ready' }); }\n" +
+      "function doPost(e) {\n  var d = {}; try { d = JSON.parse(e.postData.contents); } catch (x) {}\n  if (d.secret !== SECRET) return out({ ok: false, error: 'secret' });\n" +
+      "  var lock = LockService.getScriptLock(); lock.waitLock(10000);\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var sh = ss.getSheetByName('Scans') || ss.insertSheet('Scans');\n" +
+      "    if (sh.getLastRow() === 0) { sh.appendRow(['Time', 'Barcode', 'SKU', 'Full name', 'Type', 'Size', 'Proof', 'Flavor', 'Notes']); sh.setFrozenRows(1); sh.getRange('B:B').setNumberFormat('@'); }\n" +
+      "    if (d.action === 'ping') return out({ ok: true });\n    var code = String(d.code || '').trim();\n    if (!code) return out({ ok: false, error: 'empty' });\n" +
+      "    var last = sh.getLastRow();\n    if (last > 1) { var v = sh.getRange(2, 2, last - 1, 1).getDisplayValues(); for (var i = 0; i < v.length; i++) if (v[i][0] === code) return out({ ok: true, dup: true }); }\n" +
+      "    var r = last + 1;\n    sh.getRange(r, 2).setNumberFormat('@').setValue(code);\n    sh.getRange(r, 1).setValue(new Date());\n    return out({ ok: true, row: r });\n  } finally { lock.releaseLock(); }\n}\n" +
+      "function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }\n";
+  }
+  function sheetSend(cfg, payload) {
+    return new Promise(function (res, rej) {
+      var done = false, t = setTimeout(function () { if (!done) { done = true; rej(new Error('timeout')); } }, 9000);
+      var body = Object.assign({ secret: cfg.secret }, payload);
+      fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), redirect: 'follow' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (done) return; done = true; clearTimeout(t); if (j && j.ok) res(j); else rej(new Error(j && j.error === 'secret' ? 'secret' : 'bad')); }, function (e) { if (!done) { done = true; clearTimeout(t); rej(e); } });
+    });
+  }
+  function sheetFlush() {
+    var cfg = sheetCfg(), q = sheetQ(); if (!cfg || !q.length || sheetFlush.busy) return Promise.resolve(0);
+    sheetFlush.busy = true; var sent = 0;
+    function next() {
+      var cur = sheetQ(); if (!cur.length) { sheetFlush.busy = false; return sent; }
+      return sheetSend(cfg, { code: cur[0] }).then(function () { setSheetQ(sheetQ().slice(1)); sent++; return next(); }, function () { sheetFlush.busy = false; return sent; });
+    }
+    return next();
+  }
+  function sheetSetup(after) {
+    var secret = (sheetCfg() || {}).secret || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+    popup('', function (ov, close) {
+      var card = ov.querySelector('.popcard'), cfg = sheetCfg() || {};
+      card.innerHTML = '<h3>Scan to a Google Sheet</h3><p class="hint">One-time setup, about 3 minutes. Use a Google Sheet that only you can open.</p><ol class="hint" style="padding-left:18px;margin:8px 0;display:grid;gap:6px"><li>Open the Sheet, then Extensions, then <b>Apps Script</b>.</li><li>Delete what is there, tap <b>Copy script</b> below, and paste it. Save.</li><li>Deploy, then New deployment, type <b>Web app</b>. Run as <b>Me</b>, access <b>Anyone</b>. Deploy and allow access.</li><li>Copy the <b>Web app URL</b> and paste it here.</li></ol><div class="popbtns"><button class="btn grow" data-copy type="button">Copy script</button></div><input class="popin" id="shUrl" placeholder="Web app URL (https://script.google.com/...)" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(cfg.url || '') + '"><p class="hint" id="shMsg"></p><div class="popbtns"><button class="btn grow" data-save type="button">Test and save</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+      card.querySelector('[data-pcancel]').addEventListener('click', close);
+      card.querySelector('[data-copy]').addEventListener('click', function () {
+        var txt = sheetScript(secret), b = this;
+        function ok() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy script'; }, 1800); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function () { fallback(); }); else fallback();
+        function fallback() { var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('Could not copy.'); } ta.remove(); }
+      });
+      card.querySelector('[data-save]').addEventListener('click', function () {
+        var url = norm(card.querySelector('#shUrl').value), m = card.querySelector('#shMsg');
+        if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) { m.textContent = 'That does not look like the Web app URL. It ends in /exec.'; return; }
+        m.textContent = 'Testing...';
+        var c = { url: url, secret: secret };
+        sheetSend(c, { action: 'ping' }).then(function () {
+          try { localStorage.setItem(SHEETKEY, JSON.stringify(c)); } catch (e) {}
+          close(); toast('Sheet connected.'); if (after) after();
+        }, function (e) { m.textContent = e && e.message === 'secret' ? 'The script has a different secret word. Copy the script again and redeploy.' : 'Could not reach the Sheet. Check the URL, that access is Anyone, and that you deployed the latest version.'; });
+      });
+    });
+  }
+  function startSheetScan() {
+    var cfg = sheetCfg(); if (!cfg) { sheetSetup(startSheetScan); return; }
+    if (!window.ShelfScan) return;
+    var sent = 0, seen = {}, timer = null;
+    function head() { var w = sheetQ().length; return '<b>Scan to Google Sheet</b><span>' + sent + ' sent' + (w ? ' · ' + w + ' waiting to send' : '') + '. Type the details on the Sheet.</span>'; }
+    function refresh() { window.ShelfScan.setHead(head()); }
+    function deliver(code) {
+      sheetSend(cfg, { code: code }).then(function (j) {
+        sent++; refresh(); window.ShelfScan.log({ text: code + (j.dup ? ' is already in the Sheet' : ' sent to the Sheet'), cls: j.dup ? 'bad' : 'ok' });
+      }, function (e) {
+        if (e && e.message === 'secret') { window.ShelfScan.log({ text: 'The Sheet refused this. Redo the setup.', cls: 'bad' }); return; }
+        var q = sheetQ(); if (q.indexOf(code) < 0) { q.push(code); setSheetQ(q); }
+        refresh(); window.ShelfScan.log({ text: code + ' saved, waiting for a connection', cls: 'bad' });
+      });
+    }
+    timer = setInterval(function () { if (sheetQ().length) sheetFlush().then(function (n) { if (n) { sent += n; refresh(); window.ShelfScan.log({ text: n + ' waiting barcode' + (n === 1 ? '' : 's') + ' sent' }); } }); }, 8000);
+    window.ShelfScan.open(function (code) {
+      if (parseLabel(code)) return { text: 'That is a shelf label, not a bottle.', cls: 'bad' };
+      if (seen[code]) return { text: code + ' already scanned', cls: 'bad' };
+      seen[code] = 1; deliver(code); return null;
+    }, { continuous: true, doneText: 'Done', head: head(), onDone: function () { clearInterval(timer); var w = sheetQ().length; if (w) toast(w + ' barcode' + (w === 1 ? '' : 's') + ' still waiting. They send when this app is open with a connection.'); } });
+  }
+  window.addEventListener('online', function () { sheetFlush(); });
+  setTimeout(function () { sheetFlush(); }, 4000);
+  $('#sheetScanBtn').addEventListener('click', startSheetScan);
+  $('#sheetSetupBtn').addEventListener('click', function () { sheetSetup(); });
   /* Shelf labels: one QR per shelf, to print and stick on the shelf. Scanning it picks that spot. */
   var qrPromise = null;
   function loadQR() {
@@ -1752,7 +1837,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v101';
+  var APP_VERSION = 'v102';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
