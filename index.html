@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=104">
+<link rel="stylesheet" href="style.css?v=105">
 </head>
 <body>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -46,7 +46,6 @@
     <button class="btn ghost block" id="capBtn" type="button">Photo capture: barcode and bottle photo</button>
     <button class="btn ghost block" id="capOpen" type="button">Saved bottle photos <span id="capInfo"></span></button>
     <button class="btn block" id="sheetScanBtn" type="button">Scan barcodes to a Google Sheet</button>
-    <button class="btn ghost block" id="sheetSetupBtn" type="button">Google Sheet setup</button>
     <button class="btn ghost block" id="typeBtn" type="button">Set bottle type by aisle</button>
     <div id="recentHost"></div>
     <div id="browseHost"></div>
@@ -126,6 +125,20 @@
       <button class="btn block" id="importBtn" type="button">Import a list</button>
       <button class="btn ghost block" id="undoLastImport" type="button" hidden>Undo last import</button>
       <p class="hint">Undo stays available until you close the app. After that, use Automatic backups below: the newest one named &ldquo;Before importing&rdquo; is your list as it was.</p>
+    </div>
+    <div class="glass card" id="sheetCard">
+      <h2>Google Sheet for barcodes</h2>
+      <p>Scanned barcodes land in your own Sheet, one per row. Set up once.</p>
+      <div class="stack">
+        <p id="shStatus" class="hint"></p>
+        <ol class="hint steps"><li>Open your Sheet, then Extensions, then <b>Apps Script</b>.</li><li>Tap <b>Copy script</b> here, delete everything in Apps Script, paste, Save.</li><li>Deploy, New deployment, type <b>Web app</b>. Run as <b>Me</b>, access <b>Anyone</b>. Deploy, allow access.</li><li>Copy the <b>Web app URL</b>, paste it below, tap Connect.</li></ol>
+        <button class="btn ghost block" id="shCopy" type="button">Copy script</button>
+        <div class="field"><label for="shUrl">Web app URL</label><input id="shUrl" placeholder="https://script.google.com/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <p class="hint" id="shMsg"></p>
+        <button class="btn block" id="shConnect" type="button">Connect</button>
+        <button class="btn ghost block" id="shDisc" type="button" hidden>Disconnect</button>
+        <p class="hint">Keep the Web app URL private. Anyone with it can add rows to that Sheet.</p>
+      </div>
     </div>
     <div class="glass card">
       <h2>Back up or move to another phone</h2>
@@ -310,11 +323,11 @@
 
 <button class="updatebar" id="updateBar" type="button" hidden></button>
 <div class="toast" id="toast" role="status" hidden></div>
-<script src="search.js?v=104"></script>
-<script src="app.js?v=104"></script>
-<script src="photo.js?v=104"></script>
-<script src="scan.js?v=104"></script>
-<script src="map.js?v=104"></script>
-<script src="backup.js?v=104"></script>
+<script src="search.js?v=105"></script>
+<script src="app.js?v=105"></script>
+<script src="photo.js?v=105"></script>
+<script src="scan.js?v=105"></script>
+<script src="map.js?v=105"></script>
+<script src="backup.js?v=105"></script>
 </body>
 </html>

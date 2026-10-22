@@ -620,3 +620,8 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .placerow > select:not([data-pmap]), .placerow > input { grid-column: 1 / -1; width: 100%; }
 
 #sheetScrim.over { z-index: 90; }
+
+.card .stack { display: grid; gap: 12px; }
+.card .stack > p { margin: 0; }
+.card .stack > p:empty { display: none; }
+.card .steps { padding-left: 20px; margin: 0; display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
