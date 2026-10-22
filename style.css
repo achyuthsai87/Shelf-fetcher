@@ -574,3 +574,22 @@ h1 { margin: 4px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.3
 .recentlist li b { grid-column: 1; }
 .recentlist li em { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-style: normal; font-size: 12px; opacity: .65; white-space: nowrap; }
 .recentlist .rwhat { grid-column: 1; font-size: 13px; opacity: .8; }
+
+/* Import progress and finished card */
+.donescrim { z-index: 60; align-items: center; padding: 24px; }
+.donecard { max-width: 340px; border-radius: 28px; text-align: center; justify-items: center; animation: donepop .22s ease-out; }
+.donecard::before { display: none; }
+.donecard h2 { font-size: 20px; }
+.donecard p { margin: 0; color: var(--muted, inherit); opacity: .85; white-space: pre-line; }
+.doneic { width: 64px; height: 64px; display: grid; place-items: center; }
+.doneic svg { width: 64px; height: 64px; }
+.doneic .dc { fill: none; stroke: #2fb36d; stroke-width: 3; stroke-dasharray: 145; stroke-dashoffset: 145; animation: donedraw .5s ease-out forwards; }
+.doneic .dk { fill: none; stroke: #2fb36d; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: donedraw .35s .35s ease-out forwards; }
+.doneic .w { stroke: #e0903a; }
+.doneic.good svg { animation: doneboing .5s .55s ease-out; }
+.spin { width: 44px; height: 44px; border-radius: 50%; border: 4px solid rgba(120,140,200,.25); border-top-color: var(--accent, #5b7cf0); animation: donespin .8s linear infinite; }
+@keyframes donedraw { to { stroke-dashoffset: 0; } }
+@keyframes donespin { to { transform: rotate(360deg); } }
+@keyframes donepop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes doneboing { 0% { transform: scale(1); } 50% { transform: scale(1.14); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .doneic .dc, .doneic .dk { animation-duration: .01s; animation-delay: 0s; } .spin { animation-duration: 2s; } .donecard, .doneic.good svg { animation: none; } }

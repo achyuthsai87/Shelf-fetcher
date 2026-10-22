@@ -558,7 +558,31 @@
   /* One tap to undo the import that just ran. (An automatic backup was also saved first.) */
   var importUndoRaw = null;
   function offerUndo(prevRaw) { importUndoRaw = prevRaw; $('#importUndo').hidden = !prevRaw; }
+  /* A clear "working" state while an import runs, then a finished card, so you can tell matching from done. */
+  var CHECK = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="dc" cx="26" cy="26" r="23"/><path class="dk" d="M15 27l8 8 15-17"/></svg>';
+  var WARN = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="dc w" cx="26" cy="26" r="23"/><path class="dk w" d="M26 14v16M26 37v1"/></svg>';
+  function showBusy(title, msg) {
+    $('#doneIc').innerHTML = '<span class="spin" aria-hidden="true"></span>'; $('#doneIc').className = 'doneic';
+    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg || 'Please keep this open.'; $('#doneOk').hidden = true; $('#doneScrim').hidden = false;
+  }
+  function showDone(ok, title, msg) {
+    $('#doneIc').className = 'doneic ' + (ok ? 'good' : 'bad'); $('#doneIc').innerHTML = ok ? CHECK : WARN;
+    $('#doneTitle').textContent = title; $('#doneMsg').textContent = msg; $('#doneOk').hidden = false; $('#doneScrim').hidden = false;
+    try { if (ok && navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+    setTimeout(function () { try { $('#doneOk').focus({ preventScroll: true }); } catch (e) {} }, 60);
+  }
   function runImport() {
+    var t0 = Date.now(), mode = $('#importEnrich').checked ? 'Filling in barcodes and types' : ($('#importUpdateOnly').checked ? 'Updating prices and quantities' : 'Importing your list');
+    showBusy(mode + '...', 'Matching bottles. This can take a few seconds for a big list.');
+    setTimeout(function () {
+      var failed = false;
+      try { runImportNow(); } catch (err) { failed = true; var m = $('#importMsg'); m.textContent = 'Something went wrong: ' + (err && err.message || err) + '. Nothing was lost; use Undo or restore a backup.'; m.hidden = false; }
+      var text = $('#importMsg').textContent || '', bad = failed || /^(Choose|Pick|This file needs|This phone has no room|Something went wrong)/.test(text);
+      setTimeout(function () { showDone(!bad, bad ? 'Import not finished' : 'Import done', text); }, Math.max(0, 450 - (Date.now() - t0)));
+    }, 60);
+  }
+  $('#doneOk').addEventListener('click', function () { $('#doneScrim').hidden = true; });
+  function runImportNow() {
     offerUndo(null);
     if ($('#importEnrich').checked) { runEnrich(); return; }
     if ($('#importUpdateOnly').checked) { runRefresh(); return; }
@@ -1310,7 +1334,8 @@
       var o; try { o = JSON.parse(String(r.result || '')); } catch (x) { o = null; }
       if (!o || o.app !== 'shelf-finder' || !Array.isArray(o.bottles)) { toast('That is not a Shelf Finder backup file.'); return; }
       var res = mergeBottles(o.bottles);
-      if (res) toast('Merged: ' + res.added + ' added, ' + res.updated + ' updated, ' + res.same + ' already the same.');
+      if (res) showDone(true, 'Merge done', res.added + ' bottles added, ' + res.updated + ' updated, ' + res.same + ' already the same. Nothing was deleted.');
+      else showDone(false, 'Merge not finished', 'This phone has no room left. Nothing was changed.');
     };
     r.readAsText(f);
   });
@@ -1414,7 +1439,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v85';
+  var APP_VERSION = 'v86';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
