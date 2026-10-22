@@ -98,6 +98,7 @@
       var d = document.createElement('div'); d.className = 'logrow ' + (r.cls || '');
       var sp = document.createElement('span'); sp.textContent = r.text; d.appendChild(sp);
       if (r.undo) { var b = document.createElement('button'); b.type = 'button'; b.className = 'tbtn'; b.textContent = 'Undo'; b.addEventListener('click', function () { try { r.undo(); } catch (e) {} sp.textContent = 'Undone'; d.className = 'logrow'; b.remove(); }); d.appendChild(b); }
+      if (r.action) { var ab = document.createElement('button'); ab.type = 'button'; ab.className = 'tbtn'; ab.textContent = r.action.label; ab.addEventListener('click', function () { try { r.action.fn(); } catch (e) {} }); d.appendChild(ab); }
       host.insertBefore(d, host.firstChild);
       if (opts.beep !== false) beep(r.cls === 'bad');
     }

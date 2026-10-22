@@ -1218,14 +1218,14 @@
     function stockUnknown(code, k) {
       window.ShelfScan.hold(true);
       function resume() { window.ShelfScan.hold(false); }
-      function cancel(close) { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); close(); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad' }); }
+      function cancel(close) { skipped[k] = 1; if (unknown.indexOf(code) < 0) unknown.push(code); close(); resume(); window.ShelfScan.log({ text: code + ' skipped (not in your list)', cls: 'bad', action: { label: 'Add', fn: function () { delete skipped[k]; stockUnknown(code, k); } } }); }
       function create(info, close) {
         var raw = { id: newId(), brand: info.name, size: info.size || '', type: info.type || c.type || '', code: code };
         if (!c.m || c.m === 'main') { raw.section = c.section; raw.shelf = c.shelf; } else raw.places = [{ m: c.m, section: c.section, shelf: c.shelf }];
         var it = mk(raw);
         try { save(it); } catch (err) { toast('Could not save. This phone is out of space.'); close(); resume(); return; }
-        placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
-        window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
+        if (check) { scannedIds[it.id] = 1; var ui = unknown.indexOf(code); if (ui >= 0) unknown.splice(ui, 1); } else placed++; close(); resume(); window.ShelfScan.setHead(headHtml());
+        window.ShelfScan.log({ text: info.name + ' added as a new bottle', cls: 'ok', undo: function () { try { removeItem(it.id); if (check) delete scannedIds[it.id]; else placed--; window.ShelfScan.setHead(headHtml()); } catch (err) {} } });
       }
       popup('', function (ov, close) {
         var card = ov.querySelector('.popcard');
@@ -1291,7 +1291,7 @@
       var k = normKey(code), hit = items.filter(function (i) { return hasCode(i, k) || normKey(i.brand) === k; });
       if (!hit.length) {
         if (skipped[k]) return null;
-        if (check) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad' }; }
+        if (check) { if (unknown.indexOf(code) < 0) unknown.push(code); return { text: code + ' is not in your list', cls: 'bad', action: { label: 'Add', fn: function () { stockUnknown(code, k); } } }; }
         stockUnknown(code, k); return null;
       }
       var it = hit[0], name = it.brand + (it.flavor ? ' ' + it.flavor : '');
@@ -1538,7 +1538,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v92';
+  var APP_VERSION = 'v93';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
