@@ -17,9 +17,40 @@
     }
     return libPromise;
   }
+  var wasmPromise = null;
+  /* The main reader: zxing-cpp compiled to WebAssembly. It reads barcodes at any angle (sideways too), small or blurry ones much better than the older reader. */
+  function loadWasm() {
+    if (root.ZXingWASM && root.__zxwReady) return Promise.resolve(root.ZXingWASM);
+    if (!wasmPromise) {
+      wasmPromise = new Promise(function (res, rej) {
+        function ready() {
+          try { root.ZXingWASM.setZXingModuleOverrides({ locateFile: function (p) { return p.slice(-5) === '.wasm' ? 'vendor/zxing-wasm/zxing_reader.wasm' : p; } }); } catch (e) {}
+          /* Warm it up so the first real frame is fast; also proves the .wasm file loads. */
+          var c = document.createElement('canvas'); c.width = c.height = 8;
+          root.ZXingWASM.readBarcodes(c.getContext('2d').getImageData(0, 0, 8, 8), { formats: ['EAN-13'] }).then(function () { root.__zxwReady = true; res(root.ZXingWASM); }, function (e) { wasmPromise = null; rej(e); });
+        }
+        if (root.ZXingWASM) return ready();
+        var s = document.createElement('script');
+        s.src = 'vendor/zxing-wasm/reader.js';
+        s.onload = ready;
+        s.onerror = function () { wasmPromise = null; rej(new Error('wasm')); };
+        document.head.appendChild(s);
+      });
+    }
+    return wasmPromise;
+  }
+  var WOPT = { formats: ['EAN-13', 'EAN-8', 'UPC-A', 'UPC-E', 'Code128', 'Code39', 'ITF', 'QRCode'], tryHarder: true, tryRotate: true, tryInvert: false, maxNumberOfSymbols: 1 };
+  function grab(src, sw, sh, sx, sy, cw, ch, maxw, cv) {
+    var k = Math.min(1, maxw / cw);
+    cv.width = Math.round(cw * k); cv.height = Math.round(ch * k);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(src, sx, sy, cw, ch, 0, 0, cv.width, cv.height);
+    return cx.getImageData(0, 0, cv.width, cv.height);
+  }
   function $(s) { return document.querySelector(s); }
 
   var state = null;
+  setTimeout(function () { if (root.requestIdleCallback) root.requestIdleCallback(function () { try { loadWasm().catch(function () {}); } catch (e) {} }); }, 3000);
 
   function stop() {
     if (!state) return;
@@ -91,10 +122,24 @@
       if (!f) return;
       msg.textContent = 'Reading the photo...';
       var url = URL.createObjectURL(f);
-      loadLib().then(function (Z) {
-        var r = new Z.BrowserMultiFormatReader();
-        return r.decodeFromImageUrl(url).then(function (res) { URL.revokeObjectURL(url); found(res.getText()); }, function () { URL.revokeObjectURL(url); if (state) msg.textContent = 'No barcode found in that photo. Try again, closer and in focus.'; });
-      }, function () { URL.revokeObjectURL(url); if (state) msg.textContent = 'Could not load the scanner.'; });
+      function noneFound() { URL.revokeObjectURL(url); if (state) msg.textContent = 'No barcode found in that photo. Try again, closer and in focus.'; }
+      function oldReader() {
+        loadLib().then(function (Z) {
+          var r = new Z.BrowserMultiFormatReader();
+          return r.decodeFromImageUrl(url).then(function (res) { URL.revokeObjectURL(url); found(res.getText()); }, noneFound);
+        }, function () { URL.revokeObjectURL(url); if (state) msg.textContent = 'Could not load the scanner.'; });
+      }
+      loadWasm().then(function (W) {
+        var im = new Image();
+        im.onload = function () {
+          var cv = document.createElement('canvas'), w = im.naturalWidth, h = im.naturalHeight;
+          W.readBarcodes(grab(im, w, h, 0, 0, w, h, 1600, cv), WOPT).then(function (rs) {
+            var r = rs.filter(function (x) { return x.isValid; })[0];
+            if (r) { URL.revokeObjectURL(url); found(r.text); } else oldReader();
+          }, oldReader);
+        };
+        im.onerror = noneFound; im.src = url;
+      }, oldReader);
     });
     var video = $('#scanVideo');
     /* The camera only runs while it is needed: it is switched off while a pop-up is open or while you type, and back on afterwards (saves battery). */
@@ -103,12 +148,41 @@
       var gen = state.gen = (state.gen || 0) + 1;
       state.paused = false;
       if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { msg.textContent = 'This phone will not open the camera here. Use a photo or type the number.'; return; }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false }).then(function (stream) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (stream) {
         if (!state || state.dead || state.gen !== gen) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
         state.stream = stream;
         video.srcObject = stream;
         var p = video.play(); if (p && p.catch) p.catch(function () {});
-        msg.textContent = 'Point the camera at the barcode.';
+        msg.textContent = 'Point at the barcode, about 6 to 8 inches away. Any angle works.';
+        /* Autofocus / zoom nudges where the phone allows them (ignored otherwise). */
+        try {
+          var tr = stream.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}, adv = {};
+          if (cap.focusMode && cap.focusMode.indexOf('continuous') >= 0) adv.focusMode = 'continuous';
+          if (cap.zoom && cap.zoom.max >= 1.5) adv.zoom = Math.min(cap.zoom.max, Math.max(cap.zoom.min || 1, 1.5));
+          if (Object.keys(adv).length) tr.applyConstraints({ advanced: [adv] }).catch(function () {});
+        } catch (e) {}
+        loadWasm().then(function (W) {
+          if (!state || state.dead || state.gen !== gen) return;
+          var cv = document.createElement('canvas'), busy = false, n = 0;
+          state.timer = setInterval(function () {
+            if (!state || state.done || state.hold || busy || video.readyState < 2 || !video.videoWidth) return;
+            busy = true;
+            var vw = video.videoWidth, vh = video.videoHeight, mid = (n++ % 2) === 0;
+            /* Alternate: the middle of the frame at full detail, then the whole frame. */
+            var id = mid ? grab(video, vw, vh, vw * 0.15, vh * 0.15, vw * 0.7, vh * 0.7, 1280, cv) : grab(video, vw, vh, 0, 0, vw, vh, 1280, cv);
+            W.readBarcodes(id, WOPT).then(function (rs) {
+              busy = false;
+              var r = rs.filter(function (x) { return x.isValid; })[0];
+              if (r) found(r.text);
+            }, function () { busy = false; });
+          }, 90);
+        }, function () { fallbackReader(stream, gen); });
+      }, function () {
+        if (state) msg.textContent = 'The camera is blocked. Allow camera access for this app in the phone settings, or use a photo or type the number.';
+      });
+    }
+    function fallbackReader(stream, gen) {
+      {
         if (root.BarcodeDetector) {
           var det;
           try { det = new root.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'] }); } catch (e) { det = null; }
@@ -138,9 +212,7 @@
             } catch (e) { /* no barcode in this frame */ }
           }, 220);
         }, function () { if (state) msg.textContent = 'Could not load the scanner. Use a photo or type the number.'; });
-      }, function () {
-        if (state) msg.textContent = 'The camera is blocked. Allow camera access for this app in the phone settings, or use a photo or type the number.';
-      });
+      }
     }
     function pauseCam() {
       if (!state || state.dead || state.paused) return;

@@ -3,8 +3,8 @@
      next online open. Offline falls back to the cached copy.
    - Big static files (OCR engine, images) are cache-first, so they are not re-downloaded every time.
    - Only successful same-origin responses are cached. Bump CACHE when changing any cached file. */
-var CACHE = 'shelf-finder-v91';
-var ASSETS = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+var CACHE = 'shelf-finder-v92';
+var ASSETS = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './vendor/zxing-wasm/reader.js', './vendor/zxing-wasm/zxing_reader.wasm', './map.js', './backup.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () { return self.skipWaiting(); }));
