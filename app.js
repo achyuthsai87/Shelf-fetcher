@@ -1402,6 +1402,129 @@
       }
     });
   });
+
+  /* Photo capture: scan a barcode, snap the bottle, and keep both on this phone until you export and delete them. */
+  var capDb = null;
+  function capOpen() {
+    if (capDb) return capDb;
+    capDb = new Promise(function (res, rej) {
+      var r = indexedDB.open('shelf-finder-captures', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('c', { keyPath: 'code' }); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { capDb = null; rej(r.error); };
+    });
+    return capDb;
+  }
+  function capTx(mode, fn) {
+    return capOpen().then(function (db) { return new Promise(function (res, rej) { var t = db.transaction('c', mode), s = t.objectStore('c'), q = fn(s); t.oncomplete = function () { res(q && q.result); }; t.onerror = t.onabort = function () { rej(t.error); }; }); });
+  }
+  function capAll() { return capTx('readonly', function (s) { return s.getAll(); }).then(function (l) { return (l || []).sort(function (x, y) { return x.at - y.at; }); }); }
+  function capPut(rec) { return capTx('readwrite', function (s) { return s.put(rec); }); }
+  function capDel(code) { return capTx('readwrite', function (s) { return s.delete(code); }); }
+  function capClear() { return capTx('readwrite', function (s) { return s.clear(); }); }
+  function capCount() { return capTx('readonly', function (s) { return s.count(); }).then(function (n) { return n || 0; }, function () { return 0; }); }
+  function shrink(file, maxw) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        var k = Math.min(1, maxw / Math.max(im.naturalWidth, im.naturalHeight)), cv = document.createElement('canvas');
+        cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k);
+        cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+        cv.toBlob(function (b) { b ? res(b) : rej(new Error('blob')); }, 'image/jpeg', 0.78);
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('img')); };
+      im.src = url;
+    });
+  }
+  function blobImg(b) { return new Promise(function (res, rej) { var u = URL.createObjectURL(b), im = new Image(); im.onload = function () { URL.revokeObjectURL(u); res(im); }; im.onerror = rej; im.src = u; }); }
+  function startCapture() {
+    if (!window.ShelfScan) return;
+    var added = 0, seen = {};
+    function head() { return '<b>Photo capture</b><span>Scan a barcode, then take one clear photo of the bottle label. ' + added + ' done this time.</span>'; }
+    window.ShelfScan.open(function (code) {
+      if (seen[code]) return null;
+      window.ShelfScan.hold(true);
+      function resume() { window.ShelfScan.hold(false); }
+      capTx('readonly', function (s) { return s.get(code); }).then(function (old) {
+        popup('', function (ov, close) {
+          var card = ov.querySelector('.popcard');
+          card.innerHTML = '<h3>Photo of the bottle</h3><p>Barcode <b>' + esc(code) + '</b>' + (old ? ' already has a photo. Taking a new one replaces it.' : '. Fill the frame with the front label, steady and in focus.') + '</p><div class="popbtns"><label class="btn grow">Take photo<input id="capFile" type="file" accept="image/*" capture="environment" hidden></label></div><div class="popbtns"><button class="btn ghost" data-pcancel type="button">Skip</button></div>';
+          card.querySelector('[data-pcancel]').addEventListener('click', function () { seen[code] = 1; close(); resume(); });
+          card.querySelector('#capFile').addEventListener('change', function (e) {
+            var f = e.target.files && e.target.files[0]; if (!f) return;
+            card.querySelector('h3').textContent = 'Saving...';
+            shrink(f, 1400).then(function (blob) { return capPut({ code: code, photo: blob, at: Date.now() }); }).then(function () {
+              seen[code] = 1; added++; close(); resume(); window.ShelfScan.setHead(head());
+              window.ShelfScan.log({ text: code + ' photo saved', cls: 'ok', undo: function () { capDel(code).then(function () { delete seen[code]; added--; window.ShelfScan.setHead(head()); }); } });
+            }, function () { card.querySelector('h3').textContent = 'Could not save the photo'; toast('Could not save. This phone may be out of space.'); });
+          });
+        });
+      }, function () { toast('Could not open storage on this phone.'); resume(); });
+      return null;
+    }, { continuous: true, doneText: 'Done', head: head(), onDone: function () { capDone(); } });
+  }
+  function capDone() {
+    capAll().then(function (list) {
+      popup('', function (ov, close) {
+        var card = ov.querySelector('.popcard');
+        function main() {
+          card.innerHTML = '<h3>' + list.length + ' bottle photo' + (list.length === 1 ? '' : 's') + ' saved</h3><p>They stay on this phone only. Make the sheets, save them, send them to Claude, and then delete the photos.</p>' +
+            '<div class="popbtns"><button class="btn grow" data-mk type="button"' + (list.length ? '' : ' disabled') + '>Make sheets to save</button></div>' +
+            '<div class="popbtns"><button class="btn ghost" data-del type="button"' + (list.length ? '' : ' disabled') + '>Delete all photos</button><button class="btn ghost" data-pclose type="button">Close</button></div>';
+          card.querySelector('[data-pclose]').addEventListener('click', close);
+          card.querySelector('[data-del]').addEventListener('click', function () {
+            card.innerHTML = '<h3>Delete all ' + list.length + ' photos?</h3><p>This cannot be undone. Make sure you saved the sheets first.</p><div class="popbtns"><button class="btn grow" data-yes type="button">Delete</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+            card.querySelector('[data-yes]').addEventListener('click', function () { capClear().then(function () { list = []; toast('Photos deleted.'); refreshCapInfo(); main(); }); });
+            card.querySelector('[data-pcancel]').addEventListener('click', main);
+          });
+          card.querySelector('[data-mk]').addEventListener('click', function () { sheets(list, card, main); });
+        }
+        main();
+      });
+    }, function () { toast('Could not read the saved photos.'); });
+  }
+  function sheets(list, card, back) {
+    card.innerHTML = '<h3>Making sheets...</h3><p id="capProg">0 of ' + list.length + '</p>';
+    var per = 4, W = 1600, H = 1640, out = [], i = 0, rows = [['barcode', 'sheet', 'position']];
+    function next() {
+      if (i >= list.length) { show(); return; }
+      var chunk = list.slice(i, i + per), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+      var n = out.length + 1, k = 0;
+      (function one() {
+        if (k >= chunk.length) { cv.toBlob(function (b) { out.push(b); i += per; var p = card.querySelector('#capProg'); if (p) p.textContent = Math.min(i, list.length) + ' of ' + list.length; setTimeout(next, 0); }, 'image/jpeg', 0.86); return; }
+        var rec = chunk[k], x = (k % 2) * 800, y = Math.floor(k / 2) * 820;
+        rows.push([rec.code, n, k + 1]);
+        blobImg(rec.photo).then(function (im) {
+          var s = Math.min(792 / im.naturalWidth, 766 / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+          cx.fillStyle = '#000'; cx.fillRect(x + 4, y + 4, 792, 44); cx.fillStyle = '#fff'; cx.font = 'bold 30px sans-serif'; cx.fillText(rec.code, x + 14, y + 36);
+          cx.drawImage(im, x + 4 + (792 - w) / 2, y + 52, w, h);
+          k++; one();
+        }, function () { k++; one(); });
+      })();
+    }
+    function show() {
+      var csv = new Blob([rows.map(function (r) { return r.join(','); }).join('\n')], { type: 'text/csv' });
+      card.innerHTML = '<h3>' + out.length + ' sheet' + (out.length === 1 ? '' : 's') + ' ready</h3><p>Save each one to Photos or Files, then send them to Claude.</p><div class="poplist" id="capList"></div><div class="popbtns"><button class="btn ghost" data-back type="button">Back</button></div>';
+      var host = card.querySelector('#capList');
+      function addBtn(label, blob, name) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'linkrow'; b.textContent = label; host.appendChild(b);
+        b.addEventListener('click', function () {
+          var f = new File([blob], name, { type: blob.type });
+          if (navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f] }).catch(function () {}); return; }
+          var u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+        });
+      }
+      out.forEach(function (b, j) { addBtn('Save sheet ' + (j + 1), b, 'bottles-sheet-' + (j + 1) + '.jpg'); });
+      addBtn('Save the barcode list (CSV)', csv, 'bottle-barcodes.csv');
+      card.querySelector('[data-back]').addEventListener('click', back);
+    }
+    next();
+  }
+  function refreshCapInfo() { capCount().then(function (n) { var e = $('#capInfo'); if (e) e.textContent = n ? n + ' saved photo' + (n === 1 ? '' : 's') + ' on this phone' : ''; }); }
+  $('#capBtn').addEventListener('click', startCapture);
+  $('#capOpen').addEventListener('click', capDone);
+  refreshCapInfo();
   /* Shelf labels: one QR per shelf, to print and stick on the shelf. Scanning it picks that spot. */
   var qrPromise = null;
   function loadQR() {
@@ -1621,7 +1744,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v98';
+  var APP_VERSION = 'v99';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
