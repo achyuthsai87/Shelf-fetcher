@@ -1572,10 +1572,11 @@
     var secret = (sheetCfg() || {}).secret || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
     popup('', function (ov, close) {
       var card = ov.querySelector('.popcard'), cfg = sheetCfg() || {};
-      card.innerHTML = '<h3>Scan to a Google Sheet</h3><p class="hint">One-time setup, about 3 minutes. Use a Google Sheet that only you can open.</p><ol class="hint" style="padding-left:18px;margin:8px 0;display:grid;gap:6px"><li>Open the Sheet, then Extensions, then <b>Apps Script</b>.</li><li>Delete what is there, tap <b>Copy script</b> below, and paste it. Save.</li><li>Deploy, then New deployment, type <b>Web app</b>. Run as <b>Me</b>, access <b>Anyone</b>. Deploy and allow access.</li><li>Copy the <b>Web app URL</b> and paste it here.</li></ol><div class="popbtns"><button class="btn grow" data-copy type="button">Copy script</button></div><input class="popin" id="shUrl" placeholder="Web app URL (https://script.google.com/...)" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(cfg.url || '') + '"><p class="hint" id="shMsg"></p><div class="popbtns"><button class="btn grow" data-save type="button">Test and save</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
+      function curSecret() { var v = (card.querySelector('#shSecret').value || '').replace(/[^A-Za-z0-9]/g, ''); return v || secret; }
+      card.innerHTML = '<h3>Scan to a Google Sheet</h3><p class="hint">One-time setup, about 3 minutes. Use a Google Sheet that only you can open.</p><ol class="hint" style="padding-left:18px;margin:8px 0;display:grid;gap:6px"><li>Open the Sheet, then Extensions, then <b>Apps Script</b>.</li><li>Delete what is there, tap <b>Copy script</b> below, and paste it. Save.</li><li>Deploy, then New deployment, type <b>Web app</b>. Run as <b>Me</b>, access <b>Anyone</b>. Deploy and allow access.</li><li>Copy the <b>Web app URL</b> and paste it here.</li></ol><label class="hint" for="shSecret">Secret word (type your own, letters and numbers only, or keep this one)</label><input class="popin" id="shSecret" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(secret) + '"><div class="popbtns"><button class="btn grow" data-copy type="button">Copy script</button></div><input class="popin" id="shUrl" placeholder="Web app URL (https://script.google.com/...)" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(cfg.url || '') + '"><p class="hint" id="shMsg"></p><div class="popbtns"><button class="btn grow" data-save type="button">Test and save</button><button class="btn ghost" data-pcancel type="button">Cancel</button></div>';
       card.querySelector('[data-pcancel]').addEventListener('click', close);
       card.querySelector('[data-copy]').addEventListener('click', function () {
-        var txt = sheetScript(secret), b = this;
+        var txt = sheetScript(curSecret()), b = this;
         function ok() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy script'; }, 1800); }
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function () { fallback(); }); else fallback();
         function fallback() { var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { toast('Could not copy.'); } ta.remove(); }
@@ -1584,7 +1585,7 @@
         var url = norm(card.querySelector('#shUrl').value), m = card.querySelector('#shMsg');
         if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) { m.textContent = 'That does not look like the Web app URL. It ends in /exec.'; return; }
         m.textContent = 'Testing...';
-        var c = { url: url, secret: secret };
+        var c = { url: url, secret: curSecret() };
         sheetSend(c, { action: 'ping' }).then(function () {
           try { localStorage.setItem(SHEETKEY, JSON.stringify(c)); } catch (e) {}
           close(); toast('Sheet connected.'); if (after) after();
@@ -1837,7 +1838,7 @@
       });
     }
   } catch (e) {}
-  var APP_VERSION = 'v103';
+  var APP_VERSION = 'v104';
   $('#verNote').textContent = 'Version ' + APP_VERSION + '. Tap to fetch the newest version. Your bottles and map are kept.';
   var FILES = ['./', './index.html', './style.css', './search.js', './app.js', './photo.js', './scan.js', './map.js', './backup.js', './manifest.webmanifest', './sw.js'];
   /* Force a truly fresh copy: re-download every file past the browser's own cache, drop the service
