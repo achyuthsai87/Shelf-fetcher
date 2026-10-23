@@ -80,6 +80,12 @@
       if (!state || state.done || state.dead || state.hold) return;
       code = String(code || '').trim(); if (code.indexOf('SF1|') !== 0) code = code.replace(/\s+/g, '');
       if (!code) return;
+      if (/^https?:\/\//i.test(code) || /^www\./i.test(code)) {
+        /* Some bottles carry a QR link next to the real barcode. Use the barcode number inside it, or ignore it. */
+        var g = code.match(/(?:^|\D)(\d{12,14})(?!\d)/);
+        if (!g) { var now0 = Date.now(); if (code !== state.lastCode || now0 - state.lastAt > 2500) { state.lastCode = code; state.lastAt = now0; if (opts.continuous) addLog({ text: 'That is a web link QR, not the barcode. Scan the lines barcode.', cls: 'bad' }); else if (msg) msg.textContent = 'That is a web link QR, not the barcode. Scan the lines barcode.'; } return; }
+        code = g[1]; if (code.length === 14 && code.charAt(0) === '0') code = code.slice(1);
+      }
       if (opts.continuous) {
         var now = Date.now();
         if (code === state.lastCode && now - state.lastAt < 2500) { state.lastAt = now; return; }
